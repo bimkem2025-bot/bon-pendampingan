@@ -625,6 +625,8 @@ $('#b-set').onclick = () => {
   async o => {
     SETTING_FIELDS.forEach(([k]) => data.settings[k] = k === 'uang' ? Number(o['s_' + k]) || 0 : o['s_' + k]);
     data.settings.libur = o.libur;
+    const had = Object.keys(SHEETS).some(sh => (data[SHEETS[sh]] || []).length);
+    if (had && o.url && !remote()) download(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }), 'bon-data-cadangan.json'); // jaring pengaman sebelum migrasi
     localStorage.setItem('bon_conn', JSON.stringify({ url: o.url, key: o.key }));
     saveLocal();
     await load();
