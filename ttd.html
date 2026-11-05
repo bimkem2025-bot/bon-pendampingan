@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Tanda tangan PK</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui,"Segoe UI",Arial,sans-serif;background:#f6f7f8;color:#1f2937;padding:16px;overscroll-behavior:contain}
+h1{font-size:18px;margin:0 0 4px}p{margin:0 0 12px;color:#6b7280;font-size:14px}
+#pad{width:100%;height:260px;border:2px dashed #9ca3af;border-radius:12px;background:#fff;touch-action:none;display:block;cursor:crosshair}
+.row{display:flex;gap:10px;margin-top:14px}button{flex:1;height:46px;border-radius:10px;border:1px solid #3f5f7f;background:#fff;color:#3f5f7f;font:inherit;font-weight:600}
+button.p{background:#3f5f7f;color:#fff}button:disabled{opacity:.5}#m{margin-top:14px;font-weight:600}.ok{color:#2f6b45}.er{color:#b4443a}
+</style></head><body>
+<h1>Tanda tangan Pembimbing Kemasyarakatan</h1>
+<p>Tanda tangani di kotak dengan jari, lalu tekan Kirim. Cukup sekali; berlaku untuk semua laporan dalam satu BON.</p>
+<div id="box"><canvas id="pad"></canvas>
+<div class="row"><button id="u" type="button">Ulangi</button><button id="k" class="p" type="button">Kirim</button></div></div>
+<div id="m"></div>
+<noscript><p>Halaman ini membutuhkan JavaScript.</p></noscript>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search), T = q.get('t'), U = q.get('u');
+  var m = document.getElementById('m'), box = document.getElementById('box'), c = document.getElementById('pad'), x = c.getContext('2d'), k = document.getElementById('k');
+  function msg(t, cls) { m.textContent = t; m.className = cls || ''; }
+  function post(body) {
+    // text/plain: permintaan sederhana tanpa preflight, sama seperti yang dipakai aplikasi utama
+    return fetch(U, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
+  }
+  if (!T || !/^https:\/\/script\.google(usercontent)?\.com\//.test(U || '')) { box.hidden = true; msg('Tautan tidak lengkap. Minta tautan baru dari petugas.', 'er'); return; }
+  // ukuran kanvas mengikuti layar agar goresan tidak meleset
+  var W = Math.min(900, Math.round(c.getBoundingClientRect().width * 2)) || 900, H = 520;
+  c.width = W; c.height = H; x.lineWidth = 6; x.lineCap = 'round'; x.lineJoin = 'round'; x.strokeStyle = '#000';
+  var d = false, n = 0;
+  function pt(e) { var r = c.getBoundingClientRect(); return [(e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height]; }
+  c.addEventListener('pointerdown', function (e) { e.preventDefault(); d = true; n++; try { c.setPointerCapture(e.pointerId); } catch (_) { } var a = pt(e); x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(a[0] + .1, a[1]); x.stroke(); });
+  c.addEventListener('pointermove', function (e) { if (!d) return; e.preventDefault(); var a = pt(e); x.lineTo(a[0], a[1]); x.stroke(); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (ev) { c.addEventListener(ev, function () { d = false; }); });
+  document.getElementById('u').onclick = function () { x.clearRect(0, 0, c.width, c.height); n = 0; msg(''); };
+  function crop() {
+    var w = c.width, h = c.height, D = x.getImageData(0, 0, w, h).data, a = w, b = h, r = 0, t = 0, i, j;
+    for (j = 0; j < h; j++) for (i = 0; i < w; i++) if (D[(j * w + i) * 4 + 3] > 20) { if (i < a) a = i; if (i > r) r = i; if (j < b) b = j; if (j > t) t = j; }
+    a = Math.max(0, a - 8); b = Math.max(0, b - 8); r = Math.min(w - 1, r + 8); t = Math.min(h - 1, t + 8);
+    var o = document.createElement('canvas'); o.width = r - a + 1; o.height = t - b + 1; o.getContext('2d').drawImage(c, a, b, o.width, o.height, 0, 0, o.width, o.height); return o;
+  }
+  k.onclick = function () {
+    if (!n) return msg('Tanda tangani dulu.', 'er');
+    var o = crop(), s = o.toDataURL('image/png');
+    while (s.length > 85000) { var z = document.createElement('canvas'); z.width = Math.round(o.width * .8); z.height = Math.round(o.height * .8); z.getContext('2d').drawImage(o, 0, 0, z.width, z.height); o = z; s = o.toDataURL('image/png'); }
+    k.disabled = true; msg('Mengirim…');
+    post({ action: 'ttdkirim', token: T, img: s }).then(function (r) {
+      if (r && r.ok) { box.hidden = true; msg('Terkirim. Anda boleh menutup halaman ini.', 'ok'); } else { k.disabled = false; msg((r && r.error) || 'Gagal mengirim.', 'er'); }
+    }).catch(function () { k.disabled = false; msg('Gagal mengirim. Periksa sinyal lalu coba lagi.', 'er'); });
+  };
+  post({ action: 'ttdada', token: T }).then(function (r) { if (!r || r.status !== 'wait') { box.hidden = true; msg('Tautan ini sudah dipakai atau kedaluwarsa. Minta tautan baru dari petugas.', 'er'); } }).catch(function () { /* tetap boleh dicoba */ });
+})();
+</script></body></html>

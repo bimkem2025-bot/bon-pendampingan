@@ -75,7 +75,16 @@ function ttdHalaman_(token) {
   return HtmlService.createHtmlOutput(html).setTitle('Tanda tangan PK').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
+// aksi tanpa kata sandi untuk halaman TTD di ponsel (ttd.html): token acak sekali pakai adalah satu-satunya kredensial
+function ttdPublik_(req) {
+  const cache = CacheService.getScriptCache(), k = 'ttd_' + String(req.token || ''), raw = cache.get(k);
+  if (req.action === 'ttdada') return { ok: true, status: !raw ? 'expired' : (JSON.parse(raw).s === 'wait' ? 'wait' : 'used') };
+  const r = ttdKirim(req.token, req.img);
+  return r.success ? { ok: true } : { ok: false, error: r.message };
+}
+
 function handle_(req) {
+  if (req.action === 'ttdada' || req.action === 'ttdkirim') return json_(ttdPublik_(req));
   const key = APP_KEY !== 'GANTI_DENGAN_KATA_SANDI' ? APP_KEY : PropertiesService.getScriptProperties().getProperty('APP_KEY');
   if (!key || req.key !== key) return json_({ ok: false, error: 'unauthorized' });
   const lock = LockService.getScriptLock();
