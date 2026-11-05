@@ -60,13 +60,13 @@ function lockUi(on) {                     // layar terkunci selama ada proses ke
   $('#lock-t').textContent = pending > 1 ? `Memproses ${pending} permintaan…` : (on ? 'Menyimpan ke Google Sheets…' : '');
   if (pending > 0 && !e.matches(':popover-open')) e.showPopover(); else if (pending <= 0 && e.matches(':popover-open')) e.hidePopover();
 }
-async function api(body) {
+async function api(body, quiet) {
   const { url, key } = conn();
   lockUi(true);
   try {
     const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...body, key }) });
     const j = await r.json(); if (!j.ok) throw new Error(j.error || 'gagal'); return j;
-  } finally { lockUi(false); }
+  } finally { if (!quiet) lockUi(false); }
 }
 const saveLocal = () => localStorage.setItem('bon_data', JSON.stringify(data));
 function status(t) { $('#status').textContent = t; }
@@ -85,13 +85,13 @@ function banner() {
   $('#bn-set').onclick = guard(async () => { if (/unauthorized/.test(banner.err)) { localStorage.removeItem('bon_key'); await ensureKey(); } await load(); showTab(ui.tab); });
 }
 async function ensureKey(msg) { while (!remote()) { if (!await askKey(msg)) return false; } return true; }
-async function load() {
+async function load(quiet) {
   const local = readLocal();
   banner.err = '';
   if (remote()) {
-    status('Memuat dari Google Sheets…');
+    status(quiet ? 'Memperbarui di latar belakang…' : 'Memuat dari Google Sheets…');
     try {
-      const j = await api({ action: 'all' });
+      const j = await api({ action: 'all' }, quiet);
       const remoteData = norm(j); if (!j.settings) remoteData.settings = { ...DEFAULT_SETTINGS, ...((local && local.settings) || {}) };
       data = remoteData;
       await syncUp(local);
@@ -695,9 +695,14 @@ $('#b-set').onclick = () => {
 // ============================================================ mulai
 guard(async () => {
   await ensureKey();
-  await load();
-  showTab('klien');
+  const cached = readLocal();
+  if (cached && remote()) {                     // tampil langsung dari salinan, sinkron diam-diam di latar belakang
+    data = norm(cached); buildLibur(); status('Memperbarui…'); showTab('klien');
+    const before = JSON.stringify(data);
+    load(true).then(() => { if (JSON.stringify(data) !== before && !$('#dlg').open) showTab(ui.tab); });
+  } else { await load(); showTab('klien'); }
   loadExt(false).then(() => { if (ui.tab === 'kalender') renderKalender(); }).catch(() => {});
 })();
+
 
 
