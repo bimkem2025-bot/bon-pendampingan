@@ -62,7 +62,7 @@ function lockUi(on) {                     // layar terkunci selama ada proses ke
 }
 async function api(body, quiet) {
   const { url, key } = conn();
-  lockUi(true);
+  if (!quiet) lockUi(true);
   try {
     const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...body, key }) });
     const j = await r.json(); if (!j.ok) throw new Error(j.error || 'gagal'); return j;
