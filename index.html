@@ -67,7 +67,8 @@
 </main>
 
 <dialog id="dlg"><form method="dialog" id="dlg-form"></form></dialog>
-<dialog id="pv"><div class="pv-bar"><b id="pv-t"></b><span class="grow"></span><button type="button" id="pv-pdf" class="pri">Unduh PDF</button><button type="button" id="pv-docx">Unduh Word</button><button type="button" id="pv-x" class="ghost">Tutup</button></div><div id="pv-info" class="hint" style="padding:6px 16px;margin:0"></div><div id="pv-body"></div></dialog>
+<dialog id="pv"><div class="pv-bar"><b id="pv-t"></b><span class="grow"></span><button type="button" id="pv-pdf" class="pri">Unduh PDF</button><button type="button" id="pv-docx">Unduh Word</button><button type="button" id="pv-x" class="ghost">Tutup</button></div><div id="pv-bar2" class="row" style="padding:8px 16px;border-bottom:1px solid var(--line);margin:0" hidden></div><div id="pv-info" class="hint" style="padding:6px 16px;margin:0"></div><div id="pv-body"></div></dialog>
+<dialog id="nm" style="width:min(460px,94vw)"><form method="dialog" style="padding:20px"><h3 style="margin:0 0 8px">Nama file</h3><div class="row" style="flex-wrap:nowrap"><input id="nm-in" autocomplete="off"><span id="nm-ext" class="hint" style="margin:0"></span></div><div class="acts"><button type="button" id="nm-x">Batal</button><button type="submit" value="ok" class="pri">Unduh</button></div></form></dialog>
 <dialog id="bk"><div id="bk-body"></div></dialog>
 <div id="toast" hidden></div>
 <div id="lock" popover="manual"><div class="spin"></div><span id="lock-t">Memproses…</span></div>
