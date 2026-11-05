@@ -37,8 +37,22 @@ const photos = new Map();           // kegiatan.id -> [{file,url,caption}]
 const ui = { tab: 'klien', klien: null, cal: { y: new Date().getFullYear(), m: new Date().getMonth() }, sel: null, drag: null };
 
 // ============================================================ penyimpanan
-const conn = () => JSON.parse(localStorage.getItem('bon_conn') || '{}');
-const remote = () => !!conn().url;
+// Backend Google Sheets tertanam; hanya kata sandi yang diisi sekali per perangkat (repo ini publik, jadi sandi tidak boleh ikut kode)
+const BACKEND = 'https://script.google.com/macros/s/AKfycbwFwGIXdM4g9aCRjk5CzvYZd4rSr47A7iEV27eeqP3J-S7PBltpUYUpRbXPgcXm6zPO/exec';
+const conn = () => {
+  let key = localStorage.getItem('bon_key');
+  if (!key) { try { key = (JSON.parse(localStorage.getItem('bon_conn') || '{}')).key || ''; } catch { key = ''; } if (key) localStorage.setItem('bon_key', key); }
+  return { url: BACKEND, key: key || '' };
+};
+const remote = () => !!conn().key;
+function askKey(msg) {
+  return new Promise(res => {
+    dialog(`<h2>Masuk</h2><p class="hint">${esc(msg || 'Masukkan kata sandi sekali saja; tersimpan di perangkat ini. Data klien Anda terhubung otomatis ke Google Sheets.')}</p>
+      <label>Kata sandi<input name="key" type="password" required autofocus autocomplete="current-password"></label>`,
+    async o => { localStorage.setItem('bon_key', o.key); res(true); }, { ok: 'Masuk' });
+    $('#dlg-x').onclick = () => { $('#dlg').close(); res(false); };
+  });
+}
 let pending = 0;
 function lockUi(on) {                     // layar terkunci selama ada proses ke Google Sheets
   pending += on ? 1 : -1;
@@ -60,15 +74,17 @@ function toast(t, ms = 3500) { const e = $('#toast'); e.textContent = t; e.hidde
 const guard = fn => async (...a) => { try { return await fn(...a); } catch (e) { console.error(e); toast('Gagal: ' + e.message, 6000); } };
 
 const readLocal = () => { try { return JSON.parse(localStorage.getItem('bon_data') || 'null'); } catch { return null; } };
-// baris dengan id kembar digabung (yang terakhir dipakai) dan dibersihkan juga di Sheet\nconst dedupe = (sh, list) => { const m = new Map(); list.forEach(r => { if (m.has(r.id)) legacyQ.push([sh, r]); m.set(r.id, r); }); return [...m.values()]; };\nconst norm = d => { const o = emptyData(); Object.keys(SHEETS).forEach(s => o[SHEETS[s]] = dedupe(s, (d && d[SHEETS[s]]) || [])); o.settings = { ...DEFAULT_SETTINGS, ...((d && d.settings) || {}) }; return o; };
+// baris dengan id kembar digabung (yang terakhir dipakai) dan dibersihkan juga di Sheet
+const dedupe = (sh, list) => { const m = new Map(); list.forEach(r => { if (m.has(r.id)) legacyQ.push([sh, r]); m.set(r.id, r); }); return [...m.values()]; };
+const norm = d => { const o = emptyData(); Object.keys(SHEETS).forEach(s => o[SHEETS[s]] = dedupe(s, (d && d[SHEETS[s]]) || [])); o.settings = { ...DEFAULT_SETTINGS, ...((d && d.settings) || {}) }; return o; };
 function banner() {
   const b = $('#banner');
-  if (remote() && !banner.err) { b.hidden = true; return; }
+  if (!banner.err) { b.hidden = true; return; }
   b.hidden = false; b.className = '';
-  b.innerHTML = banner.err ? `<span>⚠ Gagal terhubung ke Google Sheets (${esc(banner.err)}). Data yang tampil adalah salinan di browser ini.</span><button id="bn-set">Periksa koneksi</button>`
-    : `<span>⚠ Belum tersambung ke Google Sheets: data hanya di browser ini dan bisa hilang. Sambungkan sekarang (±3 menit), data yang sudah ada ikut terkirim otomatis.</span><button class="pri" id="bn-set">Sambungkan</button>`;
-  $('#bn-set').onclick = () => $('#b-set').click();
+  b.innerHTML = `<span>⚠ Gagal terhubung ke Google Sheets (${esc(banner.err)}). Data yang tampil adalah salinan di browser ini.</span><button class="pri" id="bn-set">Coba lagi</button>`;
+  $('#bn-set').onclick = guard(async () => { if (/unauthorized/.test(banner.err)) { localStorage.removeItem('bon_key'); await ensureKey(); } await load(); showTab(ui.tab); });
 }
+async function ensureKey(msg) { while (!remote()) { if (!await askKey(msg)) return false; } return true; }
 async function load() {
   const local = readLocal();
   banner.err = '';
@@ -79,9 +95,9 @@ async function load() {
       const remoteData = norm(j); if (!j.settings) remoteData.settings = { ...DEFAULT_SETTINGS, ...((local && local.settings) || {}) };
       data = remoteData;
       await syncUp(local);
-      status('Tersambung: Google Sheets Anda');
+      status('Tersambung ke Google Sheets');
     } catch (e) { banner.err = e.message; data = norm(local); status('Offline: salinan lokal'); }
-  } else { data = norm(local); status('Belum tersambung ke Sheets'); }
+  } else { data = norm(local); banner.err = 'belum masuk'; status('Belum masuk'); }
   migrateLegacy();
   saveLocal(); buildLibur(); banner();
   flushLegacy().catch(e => console.error(e));
@@ -654,36 +670,20 @@ busy($('#p-lap'), async it => {
 
 // ============================================================ PENGATURAN
 $('#b-set').onclick = () => {
-  const c = conn(), s = data.settings;
-  const f = dialog(`<h2>Pengaturan</h2>
-    <h3>Penyimpanan: Google Sheets ${remote() && !banner.err ? '✓ tersambung' : '(belum tersambung)'}</h3>
-    <p class="hint">Data utama tersimpan di Google Sheet Anda; browser hanya menyimpan salinan cadangan. Data yang sudah terlanjur diketik di browser ini otomatis dikirim saat tersambung.</p>
-    <div class="grid"><div class="w2">${field('url', 'URL Web App Apps Script (…/exec)', c.url)}</div>${field('key', 'Kata sandi (APP_KEY)', c.key)}
-    <div style="align-self:end"><button type="button" id="s-kode">Buat kode skrip</button></div></div>
-    <div id="s-kodebox" hidden><p class="hint"><b>Langkah:</b> (1) buat Google Sheet baru → Extensions → Apps Script, hapus isinya, tempel kode di bawah, Save. (2) Deploy → New deployment → Web app: Execute as <i>Me</i>, access <i>Anyone</i> → Deploy → izinkan akses. (3) Salin URL <code>/exec</code> ke kolom di atas, lalu Simpan.</p>
-    <textarea class="code" id="s-kode-t" readonly></textarea><button type="button" id="s-salin">Salin kode</button></div>
+  const s = data.settings;
+  dialog(`<h2>Pengaturan</h2>
+    <p class="hint">Data tersimpan otomatis di Google Sheets. ${banner.err ? '⚠ Saat ini offline.' : '✓ Tersambung.'}</p>
     <h3>Aturan umum</h3><div class="grid">${SETTING_FIELDS.map(([k, l]) => field('s_' + k, l, s[k])).join('')}</div>
     <label>Libur nasional &amp; cuti bersama (<code>YYYY-MM-DD nama</code> per baris)<textarea name="libur" rows="6">${esc(s.libur)}</textarea></label>
     <p class="hint">PK, pangkat/jenjang, dan Kepala diatur di tab "PK &amp; Kepala".</p>
-    <div class="row" style="margin-top:10px"><button type="button" id="s-exp">Ekspor JSON (cadangan)</button><label class="inline"><button type="button" id="s-impb">Impor JSON</button><input type="file" id="s-imp" accept=".json" hidden></label></div>`,
+    <div class="row" style="margin-top:10px"><button type="button" id="s-exp">Ekspor JSON (cadangan)</button><label class="inline"><button type="button" id="s-impb">Impor JSON</button><input type="file" id="s-imp" accept=".json" hidden></label><button type="button" id="s-keluar" class="danger">Keluar dari perangkat ini</button></div>`,
   async o => {
     SETTING_FIELDS.forEach(([k]) => data.settings[k] = k === 'uang' ? Number(o['s_' + k]) || 0 : o['s_' + k]);
-    data.settings.libur = o.libur;
-    const had = Object.keys(SHEETS).some(sh => (data[SHEETS[sh]] || []).length);
-    if (had && o.url && !remote()) download(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }), 'bon-data-cadangan.json'); // jaring pengaman sebelum migrasi
-    localStorage.setItem('bon_conn', JSON.stringify({ url: o.url, key: o.key }));
-    saveLocal();
-    await load();
-    if (banner.err) { toast('Gagal tersambung: ' + banner.err, 7000); return false; }
-    await saveSettings(); await loadExt(true); showTab(ui.tab); toast(remote() ? 'Tersambung dan tersimpan di Google Sheets.' : 'Pengaturan tersimpan (belum tersambung ke Sheets).', 5000);
+    data.settings.libur = o.libur; buildLibur();
+    await saveSettings(); showTab(ui.tab); toast('Pengaturan tersimpan.');
   });
-  $('#s-kode').onclick = guard(async () => {
-    const key = f.elements.key.value || (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : uid() + uid()); f.elements.key.value = key;
-    const src = await (await fetch('apps-script/Code.gs?v=' + Date.now())).text();
-    $('#s-kode-t').value = src.replace("const APP_KEY = 'GANTI_DENGAN_KATA_SANDI'", `const APP_KEY = '${key}'`); $('#s-kodebox').hidden = false;
-  });
-  $('#s-salin').onclick = () => { $('#s-kode-t').select(); navigator.clipboard && navigator.clipboard.writeText($('#s-kode-t').value); toast('Kode disalin.'); };
   $('#s-exp').onclick = () => download(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }), 'bon-data.json');
+  $('#s-keluar').onclick = () => { if (confirm('Keluar? Kata sandi perangkat ini dihapus; data di Google Sheets tetap aman.')) { localStorage.removeItem('bon_key'); localStorage.removeItem('bon_conn'); location.reload(); } };
   $('#s-impb').onclick = () => $('#s-imp').click();
   $('#s-imp').onchange = guard(async e => {
     const f2 = e.target.files[0]; if (!f2) return; const d = JSON.parse(await f2.text());
@@ -691,9 +691,13 @@ $('#b-set').onclick = () => {
     toast('Data diimpor.'); $('#dlg').close(); showTab(ui.tab);
   });
 };
+
 // ============================================================ mulai
-guard(async () => { await load(); showTab('klien'); loadExt(false).then(() => { if (ui.tab === 'kalender') renderKalender(); }).catch(() => {}); })();
-
-
+guard(async () => {
+  await ensureKey();
+  await load();
+  showTab('klien');
+  loadExt(false).then(() => { if (ui.tab === 'kalender') renderKalender(); }).catch(() => {});
+})();
 
 

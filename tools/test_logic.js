@@ -9,7 +9,7 @@ const ctx = {
 };
 ctx.window = ctx; vm.createContext(ctx);
 const src = ['holidays.js', 'docgen.js', 'app.js'].map(f => fs.readFileSync(f, 'utf8')).join('\n');
-const EXPOSE = '\n;globalThis.T={data:()=>data,setData:d=>data=d,check,suggest,sFor,kepalaAt,riwayatAt,pangkatOf,libur:()=>libur,buildLibur,itemFor};';
+const EXPOSE = '\n;globalThis.T={data:()=>data,setData:d=>data=d,check,suggest,sFor,kepalaAt,riwayatAt,pangkatOf,libur:()=>libur,buildLibur,itemFor,load,banner:()=>banner.err,saved:()=>store};';
 vm.runInContext(src.replace(/guard\(async \(\) => \{ await load\(\);[\s\S]*$/, '') + EXPOSE, ctx);
 const T = ctx.T; const assert = require('assert');
 T.setData({ klien: [{ id: 'k', nama: 'A', tempat_lahir: 'X', tgl_lahir: '1990-01-01' }], status: [{ id: 's1', klien_id: 'k', status: 'AIII', tgl_alih: '2026-11-16', layanan: 'HAK', pk_id: 'p' }],
@@ -26,5 +26,15 @@ assert.strictEqual(T.sFor('p', '2026-03-01').sp_pk_pangkat, 'Penata Muda / III/a
 assert.strictEqual(T.sFor('p', '2026-07-01').sp_pk_jabatan, 'Pembimbing Kemasyarakatan Ahli Muda');
 assert.strictEqual(T.sFor('p', '2026-03-01').kepala_nama, 'Kepala Lama');
 assert.strictEqual(T.sFor('p', '2026-10-01').kepala_nama, 'Kepala Baru');
-console.log('ok logika');
+// muat dari backend palsu: baris kembar harus melebur dan tidak ada galat
+(async () => {
+  const calls = [];
+  ctx.fetch = async (u, o) => { const b = JSON.parse(o.body); calls.push(b.action); return { json: async () => b.action === 'all' ? { ok: true, klien: [{ id: 'k1', nama: 'Dobel' }, { id: 'k1', nama: 'Dobel' }, { id: 'k2', nama: 'Lain' }], status: [], dokumen: [], kegiatan: [], pk: [], riwayat: [], kepala: [], settings: null } : { ok: true } }; };
+  store.bon_key = 'rahasia';
+  await T.load();
+  assert.strictEqual(T.banner(), '', 'tidak boleh ada galat koneksi: ' + T.banner());
+  assert.strictEqual(T.data().klien.length, 2, 'baris kembar harus melebur');
+  console.log('ok logika + muat backend');
+})().catch(e => { console.error(e); process.exit(1); });
+
 
