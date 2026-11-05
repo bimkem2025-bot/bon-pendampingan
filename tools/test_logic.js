@@ -26,7 +26,13 @@ assert.strictEqual(T.sFor('p', '2026-03-01').sp_pk_pangkat, 'Penata Muda / III/a
 assert.strictEqual(T.sFor('p', '2026-07-01').sp_pk_jabatan, 'Pembimbing Kemasyarakatan Ahli Muda');
 assert.strictEqual(T.sFor('p', '2026-03-01').kepala_nama, 'Kepala Lama');
 assert.strictEqual(T.sFor('p', '2026-10-01').kepala_nama, 'Kepala Baru');
-// jatah monev: tanggal terisi PK lain tetap boleh; tanggal yang tidak ada di sheet = idle; libur/cuti bersama tetap menghalangi
+// orang yang sama (NIP sama) dengan catatan PK dan APK terpisah: jabatan mengikuti tanggal otomatis
+T.data().pk.push({ id: 'p2', nama: 'Budi, S.H.', nama_singkat: 'Budi', nip: '1' });
+T.data().riwayat.push({ id: 'r3', pk_id: 'p2', mulai: '2026-10-01', golongan: 'III/c', tipe: 'APK', jenjang: 'Mahir' });
+assert.strictEqual(T.sFor('p', '2026-08-01').sp_pk_pangkat, 'Penata Muda Tk.I / III/b');
+assert.strictEqual(T.sFor('p', '2026-10-15').sp_pk_pangkat, 'Penata / III/c');
+assert.strictEqual(T.sFor('p', '2026-10-15').pk_label, 'Asisten Pembimbing Kemasyarakatan');
+assert.strictEqual(T.sFor('p2', '2026-08-01').sp_pk_pangkat, 'Penata Muda Tk.I / III/b', 'pilih catatan mana pun hasilnya sama');// jatah monev: tanggal terisi PK lain tetap boleh; tanggal yang tidak ada di sheet = idle; libur/cuti bersama tetap menghalangi
 T.setExt({ rows: [{ tgl: '2026-11-17', nama: 'Klien X', pk: 'Ani' }], t: 1 });
 assert.strictEqual(T.check(d, '2026-11-17').ok, true, 'monev terisi PK lain tidak boleh menghalangi');
 assert.ok(T.check(d, '2026-11-17').noMonev, 'harus ditandai tanpa jatah monev');

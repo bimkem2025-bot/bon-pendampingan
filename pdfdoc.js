@@ -18,7 +18,7 @@ const PdfDoc = (() => {
 .doc .gt th,.doc .gt td{border:1px solid #000;padding:4px 5px;font-size:10.5pt}.doc .gt th{text-align:center;font-weight:700;vertical-align:middle}.doc .gt td.c{text-align:center}.doc .gt td.r{text-align:right}.doc .gt td.b{font-weight:700}
 .doc .ttd{margin-left:50%;text-align:center;margin-top:18px;page-break-inside:avoid}.doc .ttd .sp{height:21mm}
 .doc .ttd2{display:flex;align-items:center;margin-top:14px;page-break-inside:avoid}.doc .ttd2 .l{width:45%}.doc .ttd2 .g{width:10%}.doc .ttd2 .r2{width:45%;text-align:left}
-.doc .ttd2 img{display:block;max-height:52px;max-width:112px;margin:6px 0}
+.doc .ttd2 img{display:block;height:41px;width:auto;margin:6px 0}
 .doc .gt{table-layout:fixed}.doc .gt td.r,.doc .gt td.nw{white-space:nowrap}
 .doc ul{margin:0 0 7px;padding-left:9mm}.doc ul li{text-align:justify}
 .doc .foto{page-break-inside:avoid}.doc .foto td{border:1px solid #000;padding:6px;text-align:center;vertical-align:middle}.doc .foto img{max-width:100%;max-height:70mm;display:block;margin:0 auto}
@@ -79,10 +79,12 @@ const PdfDoc = (() => {
     let no = 0;
     const jumlah = `<tr><td colspan="5" class="c b">JUMLAH</td><td class="r b">${rp(s.uang * items.length)}</td><td></td></tr>`;
     const sign = `<p style="margin-top:12px">Demikian untuk diperiksa.</p>
-      <table style="margin-top:14px;page-break-inside:avoid"><tr>
-        <td style="width:50%">Mengetahui/Menyetujui<br>Pejabat Pembuat Komitmen,<div style="height:21mm"></div><b>${esc(s.ppk_nama)}</b><br>NIP. ${esc(s.ppk_nip)}</td>
-        <td>Sintang, ${tgl(tglBon)}<br>Yang Mengajukan Biaya<br>${esc(s.pk_label || 'Pembimbing Kemasyarakatan')}<div style="height:21mm"></div>${esc(s.pk_nama_gelar)}<br>NIP. ${esc(s.pk_nip)}</td></tr></table>`;
-    const pages = chunks.map((c, pi) => {
+      <table class="sg" style="margin-top:12px;page-break-inside:avoid">
+        <tr><td style="width:50%"></td><td>Sintang, ${tgl(tglBon)}</td></tr>
+        <tr><td>Mengetahui/Menyetujui<br>Pejabat Pembuat Komitmen,</td><td>Yang Mengajukan Biaya<br>${esc(s.pk_label || 'Pembimbing Kemasyarakatan')}</td></tr>
+        <tr><td style="height:21mm"></td><td></td></tr>
+        <tr><td class="b">${esc(s.ppk_nama)}</td><td class="b">${esc(s.pk_nama_gelar)}</td></tr>
+        <tr><td>NIP. ${esc(s.ppk_nip)}</td><td>NIP. ${esc(s.pk_nip)}</td></tr></table>`;    const pages = chunks.map((c, pi) => {
       const last = pi === chunks.length - 1, first = pi === 0;
       const rows = c.map(it => row(it, no++)).join('');
       const intro = first ? `<div class="r">Dewasa</div>

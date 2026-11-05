@@ -241,7 +241,11 @@ function dokLabel(d) { return `${DOC_SHORT[d.jenis] || d.jenis} ${d.nomor || ''}
 
 // data PK/Kepala yang berlaku pada tanggal tertentu (riwayat berperiode)
 const riwayatPk = pkId => data.riwayat.filter(r => r.pk_id === pkId).sort((a, b) => a.mulai.localeCompare(b.mulai));
-function riwayatAt(pkId, date) { const l = riwayatPk(pkId); return [...l].reverse().find(r => r.mulai <= date) || l[0]; }
+// satu orang = NIP sama (atau nama sama bila NIP kosong); riwayat PK/APK-nya digabung, jabatan dipilih otomatis menurut tanggal
+const pkKey = p => (p && (String(p.nip || '').replace(/\D/g, '') || String(p.nama || '').trim().toLowerCase())) || '';
+const pkGroup = id => { const p = data.pk.find(x => x.id === id); return p ? data.pk.filter(x => pkKey(x) === pkKey(p)).map(x => x.id) : []; };
+const riwayatGrup = id => { const g = pkGroup(id); return data.riwayat.filter(r => g.includes(r.pk_id)).sort((a, b) => a.mulai.localeCompare(b.mulai)); };
+function riwayatAt(pkId, date) { const l = riwayatGrup(pkId); return [...l].reverse().find(r => r.mulai <= date) || l[0]; }
 function kepalaAt(date) { const l = [...data.kepala].sort((a, b) => a.mulai.localeCompare(b.mulai)); return [...l].reverse().find(r => r.mulai <= date) || l[0]; }
 const pangkatOf = gol => PANGKAT[gol] ? `${PANGKAT[gol]} / ${gol}` : gol;
 // nama PK + jabatan + golongan yang berlaku pada tanggal tsb (supaya PK/APK dengan nama mirip tidak tertukar)
@@ -251,7 +255,7 @@ const pkLabel = (p, date) => {
 };
 const jabatanOf = r => `${TIPE_LABEL[r.tipe] || TIPE_LABEL.PK} ${r.jenjang || ''}`.trim();
 function sFor(pkId, date) {
-  const pk = pkOf(pkId), r = pk && riwayatAt(pkId, date), kp = kepalaAt(date), s = { ...data.settings };
+  const r = riwayatAt(pkId, date), pk = pkOf(r ? r.pk_id : pkId), kp = kepalaAt(date), s = { ...data.settings };
   s.kepala_nama = kp ? kp.nama : '';
   if (pk) {
     s.pk_nama_gelar = pk.nama; s.pk_nama = pk.nama_singkat || pk.nama; s.pk_nip = pk.nip;
@@ -399,7 +403,7 @@ function editStatus(s, k) {
     <label>Status (kode)<input name="status" list="st-saran" value="${esc(s.status)}" required placeholder="mis. AIII" autocomplete="off"><datalist id="st-saran">${STATUS_SARAN.map(x => `<option>${x}</option>`).join('')}</datalist></label>
     ${field('tgl_alih', 'Tanggal alih status', s.tgl_alih, 'type="date" required')}
     <label>Layanan pendampingan<select name="layanan">${Object.entries(KEG_LABEL).map(([v, l]) => `<option value="${v}" ${(s.layanan || (last && last.layanan === 'HAK' ? 'PUTUSAN' : 'HAK')) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-    <label>PK pendamping<select name="pk_id">${data.pk.map(p => `<option value="${p.id}" ${(s.pk_id || (data.pk[0] || {}).id) === p.id ? 'selected' : ''}>${esc(pkLabel(p, s.tgl_alih))}</option>`).join('')}</select></label></div>
+    <label>PK pendamping<select name="pk_id">${data.pk.filter((p, i, a) => a.findIndex(q => pkKey(q) === pkKey(p)) === i).map(p => `<option value="${p.id}" ${pkGroup(s.pk_id || (data.pk[0] || {}).id).includes(p.id) ? 'selected' : ''}>${esc(pkLabel(p, s.tgl_alih))}</option>`).join('')}</select></label></div>
     <p class="hint">Tanggal alih status menjadi batas paling awal tanggal pelaksanaan pendampingan untuk status ini.</p>`,
   async o => { await upsert('Status', { id: s.id || uid(), klien_id: k.id, ...o }); renderKlien(); });
 }
@@ -678,8 +682,8 @@ function pkCheck(it, date) {
   const miss = it.filter(x => !pkOf(x.pk_id) || !riwayatAt(x.pk_id, date(x)));
   if (miss.length) { toast('Data PK belum lengkap untuk: ' + [...new Set(miss.map(x => x.k.nama))].join(', ') + '. Isi di tab "PK & Kepala".', 6000); return false; }
   // tanggal dokumen lebih awal dari riwayat pertama PK: pangkat akan salah (jatuh ke data terawal), jadi dihentikan
-  const early = it.find(x => date(x) < riwayatPk(x.pk_id)[0].mulai);
-  if (early) { const p = pkOf(early.pk_id); toast(`Tanggal ${Doc.tgl(date(early))} lebih awal dari data jabatan ${p.nama_singkat || p.nama} yang mulai berlaku ${Doc.tgl(riwayatPk(p.id)[0].mulai)}. Ubah tanggal "Berlaku sejak" riwayat awalnya di tab "PK & Kepala", atau pilih PK yang benar di status klien.`, 9000); return false; }
+  const early = it.find(x => date(x) < riwayatGrup(x.pk_id)[0].mulai);
+  if (early) { const p = pkOf(early.pk_id); toast(`Tanggal ${Doc.tgl(date(early))} lebih awal dari data jabatan ${p.nama_singkat || p.nama} yang mulai berlaku ${Doc.tgl(riwayatGrup(p.id)[0].mulai)}. Ubah tanggal "Berlaku sejak" riwayat awalnya di tab "PK & Kepala", atau pilih PK yang benar di status klien.`, 9000); return false; }
   if (!kepalaAt(date(it[0]))) { toast('Isi data Kepala Bapas di tab "PK & Kepala".', 6000); return false; }
   return true;
 }
@@ -721,7 +725,7 @@ function previewLap(x) {
 $('#p-bon').onclick = guard(async () => {
   const it = chosen(); if (!it.length) return;
   const tglBon = $('#p-tglbon').value || todayIso();
-  if (new Set(it.map(x => x.pk_id)).size > 1) return toast('BON hanya untuk satu PK. Centang kegiatan milik satu PK saja.', 6000);
+  if (new Set(it.map(x => pkKey(pkOf(x.pk_id)) || x.pk_id)).size > 1) return toast('BON hanya untuk satu PK. Centang kegiatan milik satu PK saja.', 6000);
   if (!pkCheck(it, () => tglBon)) return;
   const s = sFor(it[0].pk_id, tglBon);
   showPreview({ title: `BON · ${it.length} kegiatan`, html: PdfDoc.bon(it, s, tglBon), filename: `BON ${tglBon}.pdf`, docx: () => Doc.bon(it, s, tglBon) });
