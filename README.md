@@ -29,3 +29,7 @@ Skrip membuang data klien dan nama penulis, lalu memasang tag `{nama}` dst. Doku
 ## Uji
 `node tools/test_logic.js` (aturan tanggal, PK/Kepala, muat backend) dan `node tools/test_docgen.js` menghasilkan contoh dokumen di `out/` (perlu `out/foto.jpg` sembarang JPEG).
 
+
+## Berkas & Template
+- Rekap > tombol Berkas: link Sprint (disimpan di Sheet kolom link_sprint), unggah Laporan (dengan cap tanda tangan QR yang dapat diletakkan) dan Lampiran, lalu Gabung & unduh PDF. Berkas hanya disimpan di browser (IndexedDB), tidak dikirim ke server.
+- Tab Template: editor teks kaya dengan placeholder ${...}, pratinjau dan PDF dengan kop; template tersimpan di browser (ekspor/impor JSON).

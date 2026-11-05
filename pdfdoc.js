@@ -143,5 +143,7 @@ const PdfDoc = (() => {
     } finally { host.remove(); }
   }
 
-  return { sp, bon, laporan, toPdf };
+  // surat bebas dari editor template: isi HTML (sudah terisi data) + kop opsional
+  function surat(body, withKop = true) { return wrap(page((withKop ? kop : '') + body)); }
+  return { sp, bon, laporan, toPdf, surat };
 })();
