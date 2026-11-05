@@ -1,0 +1,5 @@
+*.docx
+!templates/*.docx
+seed-lokal.json
+out/
+*.bak-*

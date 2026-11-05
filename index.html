@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bon Pendampingan</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot"></span>Bon Pendampingan</div>
+  <nav id="tabs">
+    <button data-tab="klien" class="on">Klien &amp; Dokumen</button>
+    <button data-tab="kalender">Kalender</button>
+    <button data-tab="unduh">Unduh</button>
+  </nav>
+  <div class="right"><span id="status"></span><button id="b-set" class="ghost" title="Pengaturan">⚙</button></div>
+</header>
+
+<main>
+  <section id="tab-klien">
+    <aside class="side">
+      <div class="row"><input id="k-cari" placeholder="Cari klien…"><button id="k-baru" class="pri">+</button></div>
+      <div id="k-list" class="list"></div>
+    </aside>
+    <div id="k-detail" class="pane"></div>
+  </section>
+
+  <section id="tab-kalender" hidden>
+    <aside class="side">
+      <h3>Perlu dijadwalkan</h3>
+      <p class="hint">Seret ke tanggal, atau klik lalu klik tanggal.</p>
+      <div id="q-list" class="list"></div>
+    </aside>
+    <div class="pane">
+      <div class="calbar"><button id="c-prev" class="ghost">‹</button><h2 id="c-judul"></h2><button id="c-next" class="ghost">›</button>
+        <button id="c-today" class="ghost">Hari ini</button><button id="c-saran">Saran tanggal</button><button id="c-ext" class="ghost" title="Muat ulang jadwal PK lain">↻ Jadwal PK lain</button></div>
+      <div id="c-grid"></div>
+      <div class="legend"><i class="l-free"></i>idle <i class="l-ext"></i>PK lain <i class="l-me"></i>jadwal Anda <i class="l-off"></i>libur/akhir pekan <i class="l-un"></i>tidak ada di sheet</div>
+    </div>
+  </section>
+
+  <section id="tab-unduh" hidden>
+    <div class="pane wide">
+      <div class="row between"><h2>Unduh dokumen</h2>
+        <div class="row"><select id="p-bulan"></select><label class="inline">Tgl BON <input type="date" id="p-tglbon"></label></div></div>
+      <div id="p-list"></div>
+      <div class="row sticky"><button id="p-sp" class="pri">SP (zip)</button><button id="p-bon" class="pri">BON</button><button id="p-lap" class="pri">Laporan</button><span class="hint" id="p-info"></span></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlg"><form method="dialog" id="dlg-form"></form></dialog>
+<div id="toast" hidden></div>
+
+<script src="lib/jszip.min.js"></script>
+<script src="holidays.js"></script>
+<script src="docgen.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
