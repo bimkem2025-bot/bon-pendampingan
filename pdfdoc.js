@@ -2,7 +2,7 @@
    kop dari gambar KOP). Isi dokumen sama dengan template Word. Semua dibuat di browser. */
 const PdfDoc = (() => {
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const tgl = Doc.tgl, rp = Doc.rupiah;
+  const tgl = Doc.tgl, rp = n => Doc.rupiah(n).replace(/\s/g, ' ');
 
   const CSS = `<style>
 .doc{font:11pt/1.4 "Times New Roman",Times,serif;color:#000;background:#fff}
@@ -12,11 +12,14 @@ const PdfDoc = (() => {
 .doc h1{font-size:12.5pt;text-align:center;margin:0;font-weight:700}
 .doc p{margin:0 0 7px;text-align:justify}.doc .c{text-align:center}.doc .r{text-align:right}.doc .b{font-weight:700}
 .doc table{border-collapse:collapse;width:100%}.doc td,.doc th{vertical-align:top;padding:1px 0;border:0;color:#000;font-size:inherit;font-weight:inherit;letter-spacing:0;text-transform:none;text-align:left}.doc h1,.doc p{letter-spacing:0;text-transform:none;color:#000}
-.doc .kv td:nth-child(1){width:36mm}.doc .kv.w td:nth-child(1){width:64mm}.doc .kv td:nth-child(2){width:5mm;text-align:center}
-.doc .ls td:nth-child(1){width:27mm}.doc .ls td:nth-child(2){width:5mm;text-align:center}.doc .ls td:nth-child(3){width:8mm}.doc .ls td{text-align:justify}
-.doc .id td:nth-child(1){width:9mm}.doc .id td:nth-child(2){width:62mm}.doc .id td:nth-child(3){width:5mm}
-.doc .grid th,.doc .grid td{border:1px solid #000;padding:4px 5px;font-size:10.5pt}.doc .grid th{text-align:center;font-weight:700;vertical-align:middle}.doc .grid td.c{text-align:center}.doc .grid td.r{text-align:right}.doc .grid td.b{font-weight:700}
+.doc .kv td:nth-child(1){white-space:nowrap;padding-right:1.5mm}.doc .kv td:nth-child(2){width:3mm;text-align:left}.doc .kv td:nth-child(3){width:100%;padding-left:1.5mm}
+.doc .ls>tbody>tr>td:nth-child(1){width:27mm}.doc .ls>tbody>tr>td:nth-child(2){width:5mm;text-align:center}.doc .ls>tbody>tr>td:nth-child(3){width:8mm}.doc .ls>tbody>tr>td{text-align:justify}.doc .kv{width:auto}
+.doc .id td:nth-child(1){width:9mm}.doc .id td:nth-child(2){white-space:nowrap;padding-right:1.5mm}.doc .id td:nth-child(3){width:3mm}.doc .id td:nth-child(4){width:100%}
+.doc .gt th,.doc .gt td{border:1px solid #000;padding:4px 5px;font-size:10.5pt}.doc .gt th{text-align:center;font-weight:700;vertical-align:middle}.doc .gt td.c{text-align:center}.doc .gt td.r{text-align:right}.doc .gt td.b{font-weight:700}
 .doc .ttd{margin-left:50%;text-align:center;margin-top:18px;page-break-inside:avoid}.doc .ttd .sp{height:21mm}
+.doc .ttd2{display:flex;align-items:center;margin-top:14px;page-break-inside:avoid}.doc .ttd2 .l{width:45%}.doc .ttd2 .g{width:10%}.doc .ttd2 .r2{width:45%;text-align:left}
+.doc .ttd2 img{display:block;max-height:52px;max-width:112px;margin:6px 0}
+.doc .gt{table-layout:fixed}.doc .gt td.r,.doc .gt td.nw{white-space:nowrap}
 .doc ul{margin:0 0 7px;padding-left:9mm}.doc ul li{text-align:justify}
 .doc .foto{page-break-inside:avoid}.doc .foto td{border:1px solid #000;padding:6px;text-align:center;vertical-align:middle}.doc .foto img{max-width:100%;max-height:70mm;display:block;margin:0 auto}
 </style>`;
@@ -44,7 +47,7 @@ const PdfDoc = (() => {
     const ls = (label, items, mark) => `<table class="ls">${items.map((t, i) => `<tr><td>${i ? '' : label}</td><td>${i ? '' : ':'}</td><td>${mark(i)}</td><td>${t}</td></tr>`).join('')}</table>`;
     const kv = rows => `<table class="kv">${rows.map(([a, b, bold]) => `<tr><td>${a}</td><td>:</td><td${bold ? ' class="b"' : ''}>${esc(b)}</td></tr>`).join('')}</table>`;
     return wrap(page(`${kop}
-      <h1>SURAT PERINTAH</h1><div class="c">Nomor: ................................</div>
+      <h1>SURAT PERINTAH</h1><div class="c">Nomor: ${'$'}{nomor_naskah}</div>
       <h1 style="margin:2px 0 10px">KEPALA BALAI PEMASYARAKATAN KELAS II SINTANG</h1>
       ${ls('Menimbang', menimbang, i => 'abcd'[i] + '.')}
       <div style="height:6px"></div>
@@ -59,23 +62,35 @@ const PdfDoc = (() => {
         <tr><td></td><td></td><td>3.</td><td>Melaporkan hasil kegiatan kepada Kepala Balai Pemasyarakatan</td></tr>
       </table>
       <p style="margin-top:10px">Demikian Surat Perintah untuk dilaksanakan dan kepada semua pihak terkait dimohon bantuannya. Terima kasih.</p>
-      <div class="ttd">Sintang, ${tgl(keg.tgl_sp || keg.tgl_pel)}<br>Kepala,<div class="sp"></div><b>${esc(s.kepala_nama)}</b></div>`), "sm");
+      <div class="ttd2"><div class="l">${'$'}{ttd_pengirim}</div><div class="g"></div><div class="r2">Sintang, ${tgl(keg.tgl_sp || keg.tgl_pel)}<br>Kepala,<img src="assets/ttd-el.png" alt=""><b>${esc(s.kepala_nama)}</b></div></div>`), "sm");
   }
 
   // ---------------------------------------------------------------- BON
   function bon(items, s, tglBon) {
-    const rows = items.map(({ keg, k }, i) => `<tr><td class="c">${i + 1}</td><td>${esc(k.nama)}<br>${keg.jenis === 'PUTUSAN' ? '(Pendampingan Pelaksanaan Putusan)' : '(Pendampingan Pemenuhan Hak Tahanan)'}</td><td class="c">${esc(keg.status_klien)}</td>
-      <td class="c">${tgl(keg.tgl_sp || keg.tgl_pel)}</td><td class="c">${tgl(keg.tgl_pel)}</td><td class="r">${rp(s.uang)}</td><td class="c">${esc(keg.ket || s.ket || '')}</td></tr>`).join('');
-    return wrap(page(`${kop}
-      <div class="r">Dewasa</div>
-      <p class="b" style="margin:10px 0 12px;text-align:left">Yth. Pejabat Pembuat Komitmen<br>&emsp;&emsp;Bapas Kelas II Sintang<br>di - <br>&emsp;&emsp;Sintang</p>
-      <p>Dengan ini mengajukan biaya Pelaksanaan Kegiatan Pendampingan Tahanan Dewasa untuk program pendampingan pelaksanaan putusan dan pemenuhan hak tersangka untuk klien Dewasa atas nama :</p>
-      <table class="grid"><tr><th>No</th><th>Nama Klien</th><th>Status Klien</th><th>Tanggal Surat Perintah</th><th>Tanggal Pelaksanaan</th><th>Besar Uang (Rp.)</th><th>Keterangan</th></tr>${rows}
-        <tr><td colspan="5" class="c b">JUMLAH</td><td class="r b">${rp(s.uang * items.length)}</td><td></td></tr></table>
-      <p style="margin-top:12px">Demikian untuk diperiksa.</p>
+    const cols = '<colgroup><col style="width:9mm"><col><col style="width:16mm"><col style="width:25mm"><col style="width:25mm"><col style="width:29mm"><col style="width:27mm"></colgroup>';
+    const head = '<tr><th>No</th><th>Nama Klien</th><th>Status Klien</th><th>Tanggal Surat Perintah</th><th>Tanggal Pelaksanaan</th><th>Besar Uang (Rp.)</th><th>Keterangan</th></tr>';
+    const row = ({ keg, k }, i) => `<tr><td class="c">${i + 1}</td><td>${esc(k.nama)}<br>${keg.jenis === 'PUTUSAN' ? '(Pendampingan Pelaksanaan Putusan)' : '(Pendampingan Pemenuhan Hak Tahanan)'}</td><td class="c">${esc(keg.status_klien)}</td>
+      <td class="c">${tgl(keg.tgl_sp || keg.tgl_pel)}</td><td class="c">${tgl(keg.tgl_pel)}</td><td class="r">${rp(s.uang)}</td><td class="c">${esc(keg.ket || s.ket || '')}</td></tr>`;
+    // 12 baris di halaman pertama, 14 di halaman lanjutan; halaman terakhir harus muat JUMLAH + tanda tangan
+    const FIRST = 12, NEXT = 14, LAST1 = 7, LASTN = 10, chunks = [];
+    for (let i = 0; i < items.length;) { const cap = chunks.length ? NEXT : FIRST; chunks.push(items.slice(i, i + cap)); i += cap; }
+    if (!chunks.length) chunks.push([]);
+    if (chunks[chunks.length - 1].length > (chunks.length === 1 ? LAST1 : LASTN)) chunks.push([]);
+    let no = 0;
+    const jumlah = `<tr><td colspan="5" class="c b">JUMLAH</td><td class="r b">${rp(s.uang * items.length)}</td><td></td></tr>`;
+    const sign = `<p style="margin-top:12px">Demikian untuk diperiksa.</p>
       <table style="margin-top:14px;page-break-inside:avoid"><tr>
         <td style="width:50%">Mengetahui/Menyetujui<br>Pejabat Pembuat Komitmen,<div style="height:21mm"></div><b>${esc(s.ppk_nama)}</b><br>NIP. ${esc(s.ppk_nip)}</td>
-        <td>Sintang, ${tgl(tglBon)}<br>Yang Mengajukan Biaya<br>${esc(s.pk_label || 'Pembimbing Kemasyarakatan')}<div style="height:21mm"></div>${esc(s.pk_nama_gelar)}<br>NIP. ${esc(s.pk_nip)}</td></tr></table>`));
+        <td>Sintang, ${tgl(tglBon)}<br>Yang Mengajukan Biaya<br>${esc(s.pk_label || 'Pembimbing Kemasyarakatan')}<div style="height:21mm"></div>${esc(s.pk_nama_gelar)}<br>NIP. ${esc(s.pk_nip)}</td></tr></table>`;
+    const pages = chunks.map((c, pi) => {
+      const last = pi === chunks.length - 1, first = pi === 0;
+      const rows = c.map(it => row(it, no++)).join('');
+      const intro = first ? `<div class="r">Dewasa</div>
+      <p class="b" style="margin:10px 0 12px;text-align:left">Yth. Pejabat Pembuat Komitmen<br>&emsp;&emsp;Bapas Kelas II Sintang<br>di - <br>&emsp;&emsp;Sintang</p>
+      <p>Dengan ini mengajukan biaya Pelaksanaan Kegiatan Pendampingan Tahanan Dewasa untuk program pendampingan pelaksanaan putusan dan pemenuhan hak tersangka untuk klien Dewasa atas nama :</p>` : `<p class="r" style="margin-bottom:6px">Lanjutan BON (halaman ${pi + 1} dari ${chunks.length})</p>`;
+      return page(`${kop}${intro}<table class="gt">${cols}${head}${rows}${last ? jumlah : ''}</table>${last ? sign : ''}`);
+    }).join('');
+    return wrap(pages);
   }
 
   // ---------------------------------------------------------------- LAPORAN (1 kegiatan, foto lampiran)
@@ -91,7 +106,7 @@ const PdfDoc = (() => {
     const kv = rows => `<table class="kv w">${rows.map(([a, b]) => `<tr><td>${a}</td><td>:</td><td>${esc(b)}</td></tr>`).join('')}</table>`;
     const foto = (photos || []).map(p => `<tr class="foto"><td style="width:62%"><img src="${p.url}" alt=""></td><td>${esc(p.caption)}</td></tr>`).join('');
     const lamp = page(`<div class="r b">LAMPIRAN</div><h1>DOKUMENTASI</h1><h1 style="margin-bottom:10px">PENDAMPINGAN ${judul}</h1>
-      <table class="grid" style="font-size:10.5pt"><tr><th>Foto</th><th>Keterangan</th></tr>${foto || '<tr><td colspan="2" class="c">(belum ada foto)</td></tr>'}</table>`);
+      <table class="gt" style="font-size:10.5pt"><tr><th>Foto</th><th>Keterangan</th></tr>${foto || '<tr><td colspan="2" class="c">(belum ada foto)</td></tr>'}</table>`);
     return wrap(page(`${kop}
       <h1>LAPORAN HASIL PENDAMPINGAN ${judul}</h1>
       <div style="margin:10px 0">${kv([['Status', put ? 'Pendampingan Pelaksanaan Putusan Klien Dewasa' : 'Pendampingan Pemenuhan Hak Klien Dewasa'], ['Waktu Pelaksanaan', tglL], ['Nama PK', s.pk_nama_gelar]])}</div>
