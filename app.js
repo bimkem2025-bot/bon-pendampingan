@@ -60,7 +60,7 @@ function toast(t, ms = 3500) { const e = $('#toast'); e.textContent = t; e.hidde
 const guard = fn => async (...a) => { try { return await fn(...a); } catch (e) { console.error(e); toast('Gagal: ' + e.message, 6000); } };
 
 const readLocal = () => { try { return JSON.parse(localStorage.getItem('bon_data') || 'null'); } catch { return null; } };
-const norm = d => { const o = emptyData(); Object.keys(SHEETS).forEach(s => o[SHEETS[s]] = (d && d[SHEETS[s]]) || []); o.settings = { ...DEFAULT_SETTINGS, ...((d && d.settings) || {}) }; return o; };
+// baris dengan id kembar digabung (yang terakhir dipakai) dan dibersihkan juga di Sheet\nconst dedupe = (sh, list) => { const m = new Map(); list.forEach(r => { if (m.has(r.id)) legacyQ.push([sh, r]); m.set(r.id, r); }); return [...m.values()]; };\nconst norm = d => { const o = emptyData(); Object.keys(SHEETS).forEach(s => o[SHEETS[s]] = dedupe(s, (d && d[SHEETS[s]]) || [])); o.settings = { ...DEFAULT_SETTINGS, ...((d && d.settings) || {}) }; return o; };
 function banner() {
   const b = $('#banner');
   if (remote() && !banner.err) { b.hidden = true; return; }
@@ -296,7 +296,7 @@ function renderKlien() {
   const docs = data.dokumen.filter(d => d.klien_id === k.id).sort((a, b) => (a.tgl_dokumen || '').localeCompare(b.tgl_dokumen || ''));
   const sts = data.status.filter(s => s.klien_id === k.id).sort((a, b) => (a.tgl_alih || '').localeCompare(b.tgl_alih || ''));
   pane.innerHTML = `
-    <div class="row between"><h2>${esc(k.nama)}</h2><div class="row"><button id="k-ubah">Ubah data</button><button id="k-hapus" class="danger">Hapus</button></div></div>
+    <div class="row between"><h2>${esc(k.nama)}</h2><div class="row"><button id="k-ubah">Ubah data</button><button id="k-gabung">Gabung ke klien lain</button><button id="k-hapus" class="danger">Hapus</button></div></div>
     <p class="hint">${esc(k.tempat_lahir)}, ${Doc.tgl(k.tgl_lahir)} · ${esc(k.agama)} · ${esc(k.pekerjaan)} · ${esc(k.alamat)}</p>
     <p class="hint"><b>Perkara:</b> ${esc(perkaraOf(k)) || '—'} · <b>Asal lembaga:</b> ${esc(k.asal_lembaga) || '—'}</p>
     <div class="row between" style="margin-top:14px"><h3>1. Perubahan status klien</h3><button id="s-baru" class="pri">+ Status</button></div>
@@ -322,9 +322,25 @@ function renderKlien() {
   }));
   $('#k-ubah').onclick = () => editKlien(k);
   $('#k-hapus').onclick = guard(async () => {
-    if (data.dokumen.some(d => d.klien_id === k.id) || data.status.some(s => s.klien_id === k.id)) return toast('Hapus dulu status dan dokumen klien ini.');
-    if (confirm('Hapus ' + k.nama + '?')) { await remove('Klien', k.id); ui.klien = null; renderKlien(); }
+    const ds = data.dokumen.filter(d => d.klien_id === k.id), ss = data.status.filter(s => s.klien_id === k.id);
+    const gs = ds.flatMap(d => kegOfDok(d.id));
+    if (!confirm(`Hapus ${k.nama}${ds.length + ss.length ? ` beserta ${ss.length} status, ${ds.length} dokumen, ${gs.length} jadwal` : ''}? Tidak bisa dibatalkan.`)) return;
+    for (const g of gs) await hapus('Kegiatan', g.id);
+    for (const d of ds) await hapus('Dokumen', d.id);
+    for (const s of ss) await hapus('Status', s.id);
+    await hapus('Klien', k.id); ui.klien = null; renderKlien(); toast('Klien dihapus.');
   });
+  $('#k-gabung').onclick = () => {
+    const lain = data.klien.filter(x => x.id !== k.id).sort((a, b) => a.nama.localeCompare(b.nama));
+    if (!lain.length) return toast('Tidak ada klien lain.');
+    dialog(`<h2>Gabung ke klien lain</h2><p class="hint">Semua status, dokumen, dan jadwal milik <b>${esc(k.nama)}</b> dipindah ke klien yang dipilih, lalu klien ini dihapus. Pilih klien yang datanya ingin dipertahankan.</p>
+      <label>Gabung ke<select name="ke">${lain.map(x => `<option value="${x.id}" ${x.nama.toLowerCase() === k.nama.toLowerCase() ? 'selected' : ''}>${esc(x.nama)} · ${esc(x.tempat_lahir)}, ${Doc.tgl(x.tgl_lahir)}</option>`).join('')}</select></label>`,
+    async o => {
+      for (const s of data.status.filter(x => x.klien_id === k.id)) await upsert('Status', { ...s, klien_id: o.ke });
+      for (const d of data.dokumen.filter(x => x.klien_id === k.id)) await upsert('Dokumen', { ...d, klien_id: o.ke });
+      await hapus('Klien', k.id); ui.klien = o.ke; renderKlien(); toast('Digabung.');
+    }, { ok: 'Gabung' });
+  };
   $('#d-baru').onclick = () => editDokumen(null, k);
   $$('[data-ed]', pane).forEach(b => b.onclick = () => editDokumen(dokOf(b.dataset.ed), k));
   $$('[data-del]', pane).forEach(b => b.onclick = guard(async () => {
@@ -677,6 +693,7 @@ $('#b-set').onclick = () => {
 };
 // ============================================================ mulai
 guard(async () => { await load(); showTab('klien'); loadExt(false).then(() => { if (ui.tab === 'kalender') renderKalender(); }).catch(() => {}); })();
+
 
 
 

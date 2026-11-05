@@ -3,3 +3,8 @@
 seed-lokal.json
 out/
 *.bak-*
+
+apps-script/.local.json
+apps-script/.build/
+
+apps-script/.local.json

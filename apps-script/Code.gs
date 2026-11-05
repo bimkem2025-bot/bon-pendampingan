@@ -93,6 +93,8 @@ function upsert_(name, row) {
   const i = ids.indexOf(vals[0]);
   const target = i >= 0 ? i + 2 : last + 1;
   sh.getRange(target, 1, 1, cols.length).setNumberFormat('@').setValues([vals]);
+  // buang baris kembar dengan id yang sama
+  for (let j = ids.length - 1; j > i && i >= 0; j--) if (ids[j] === vals[0]) sh.deleteRow(j + 2);
 }
 
 function remove_(name, id) {
@@ -100,8 +102,5 @@ function remove_(name, id) {
   const last = sh.getLastRow();
   if (last < 2) return;
   const ids = sh.getRange(2, 1, last - 1, 1).getValues().map(r => String(r[0]));
-  const i = ids.indexOf(String(id));
-  if (i >= 0) sh.deleteRow(i + 2);
+  for (let i = ids.length - 1; i >= 0; i--) if (ids[i] === String(id)) sh.deleteRow(i + 2); // semua baris ber-id sama
 }
-
-
