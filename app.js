@@ -193,7 +193,9 @@ function buildLibur() {
   libur = new Map();
   (data.settings.libur || '').split('\n').forEach(l => { const m = l.trim().match(/^(\d{4}-\d{2}-\d{2})\s*(.*)$/); if (m) libur.set(m[1], m[2] || 'Libur'); });
 }
-const extMax = () => ext.rows.reduce((a, r) => r.tgl > a ? r.tgl : a, '');
+// Sheet jadwal hanya KUOTA monev: tanggal yang sudah terisi PK lain berarti jatah monev hari itu sudah terpakai,
+// bukan larangan melaksanakan kegiatan. Tanggal yang tidak ada di sheet dianggap idle. Yang menghalangi hanya
+// akhir pekan, libur nasional/cuti bersama, dan jadwal Anda sendiri.
 function occupancy(date, exceptKegId) {
   const e = ext.rows.filter(r => r.tgl === date && r.nama);
   const mine = data.kegiatan.filter(g => g.tgl_pel === date && g.id !== exceptKegId);
@@ -205,28 +207,26 @@ function dayInfo(date, exceptKegId) {
   if (libur.has(date)) return { st: 'off', why: 'Libur: ' + libur.get(date) };
   const { e, mine } = occupancy(date, exceptKegId);
   if (mine.length) return { st: 'me', why: 'Sudah ada kegiatan Anda di tanggal ini' };
-  if (e.length) return { st: 'ext', why: 'Sudah dipilih PK lain: ' + [...new Set(e.map(x => x.pk || 'PK lain'))].join(', ') };
-  const listed = ext.rows.some(r => r.tgl === date);
-  if (!listed && ext.rows.length && date <= extMax()) return { st: 'un', why: 'Tidak ada baris di sheet jadwal' };
-  return { st: 'free', why: '' };
+  if (e.length) return { st: 'ext', why: 'Jatah monev hari ini sudah terisi (' + [...new Set(e.map(x => x.pk || 'PK lain'))].join(', ') + '). Kegiatan tetap bisa dilaksanakan, hanya tanpa jatah monev.' };
+  return { st: 'free', why: 'Idle, jatah monev tersedia' };
 }
 // apakah dokumen ini boleh dilaksanakan pada tanggal tsb
 function check(dok, date, exceptKegId) {
   const di = dayInfo(date, exceptKegId);
-  if (di.st === 'off' || di.st === 'me' || di.st === 'ext') return { ok: false, why: di.why };
+  if (di.st === 'off' || di.st === 'me') return { ok: false, why: di.why };
   if (dok && dok.tgl_dokumen && date <= dok.tgl_dokumen) return { ok: false, why: `Harus setelah tanggal dokumen (${Doc.tgl(dok.tgl_dokumen)})` };
   const st = dok && stOf(dok);
   if (dok && !st) return { ok: false, why: 'Dokumen belum terhubung ke status klien' };
   if (st && st.tgl_alih && date < st.tgl_alih) return { ok: false, why: `Tidak boleh sebelum tanggal alih status ${st.status} (${Doc.tgl(st.tgl_alih)})` };
-  return { ok: true, soft: di.st === 'un' ? di.why : '' };
+  return { ok: true, noMonev: di.st === 'ext' ? di.why : '' };
 }
 function suggest(dok, from) {
   let d = from || todayIso(); if (dok && dok.tgl_dokumen && d <= dok.tgl_dokumen) d = addDays(dok.tgl_dokumen, 1);
   const st = dok && stOf(dok); if (st && st.tgl_alih && d < st.tgl_alih) d = st.tgl_alih;
-  for (let i = 0; i < 400; i++, d = addDays(d, 1)) { const c = check(dok, d); if (c.ok && !c.soft) return d; }
-  return null;
-}
-function prevWorkday(date) { let d = addDays(date, -1); for (let i = 0; i < 10; i++, d = addDays(d, -1)) { const w = Doc.parse(d).getDay(); if (w && w < 6 && !libur.has(d)) return d; } return date; }
+  let first = null;
+  for (let i = 0; i < 400; i++, d = addDays(d, 1)) { const c = check(dok, d); if (!c.ok) continue; if (!c.noMonev) return d; first = first || d; }
+  return first;                                       // tidak ada hari dengan jatah monev: pakai hari idle terdekat
+}function prevWorkday(date) { let d = addDays(date, -1); for (let i = 0; i < 10; i++, d = addDays(d, -1)) { const w = Doc.parse(d).getDay(); if (w && w < 6 && !libur.has(d)) return d; } return date; }
 
 // ============================================================ relasi
 const klienOf = id => data.klien.find(k => k.id === id);
@@ -503,7 +503,11 @@ function editKepala(r) {
 $('#c-prev').onclick = () => { ui.cal.m--; if (ui.cal.m < 0) { ui.cal.m = 11; ui.cal.y--; } renderKalender(); };
 $('#c-next').onclick = () => { ui.cal.m++; if (ui.cal.m > 11) { ui.cal.m = 0; ui.cal.y++; } renderKalender(); };
 $('#c-today').onclick = () => { const n = new Date(); ui.cal = { y: n.getFullYear(), m: n.getMonth() }; renderKalender(); };
-$('#c-ext').onclick = guard(async () => { await loadExt(true); renderKalender(); toast('Jadwal PK lain diperbarui.'); });
+$('#c-ext').onclick = guard(async () => {
+  const b = $('#c-ext'); if (b.disabled) return; b.disabled = true; b.textContent = 'Menarik dari sheet…';
+  try { const n0 = ext.rows.length; await loadExt(true); renderKalender(); toast(`Jatah monev diperbarui dari sheet (${ext.rows.filter(r => r.nama).length} terisi, ${ext.rows.length - n0 >= 0 ? '+' : ''}${ext.rows.length - n0} baris).`, 5000); }
+  finally { b.disabled = false; b.textContent = '↻ Tarik jatah monev dari sheet'; }
+});
 $('#c-saran').onclick = () => {
   const d = dokOf(ui.sel); if (!d) return toast('Pilih dulu klien di daftar kiri.');
   const s = suggest(d); if (!s) return toast('Tidak ada tanggal yang cocok.');
@@ -527,6 +531,7 @@ function renderKalender() {
   });
 
   const { y, m } = ui.cal;
+  $('#c-info').textContent = ext.t ? `Jatah monev ditarik dari sheet pukul ${new Date(ext.t).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} (${ext.rows.filter(r => r.nama).length} terisi). Tanggal yang tidak ada di sheet dianggap idle.` : 'Jatah monev belum ditarik dari sheet.';
   $('#c-judul').textContent = `${Doc.BULAN[m]} ${y}`;
   const g = $('#c-grid'); g.innerHTML = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map(h => `<div class="dh">${h}</div>`).join('');
   const lead = (new Date(y, m, 1).getDay() + 6) % 7;
@@ -536,7 +541,7 @@ function renderKalender() {
     const s = iso(new Date(y, m, dd)), di = dayInfo(s), { e, mine } = occupancy(s);
     const tags = [
       ...mine.map(kg => { const dk = dokOf(kg.dokumen_id), kl = dk && klienOf(dk.klien_id); return `<span class="t m" title="${esc(kl && kl.nama)}">${esc(kl ? kl.nama.split(' ')[0] : '?')}</span>`; }),
-      ...e.slice(0, 2).map(r => `<span class="t e" title="${esc(r.pk + ' · ' + r.nama)}">${esc(r.pk || 'PK lain')}</span>`),
+      ...e.slice(0, 2).map(r => `<span class="t e" title="Monev terisi: ${esc(r.pk + ' · ' + r.nama)}">monev: ${esc(r.pk || 'PK lain')}</span>`),
       ...(di.st === 'off' && libur.has(s) ? [`<span class="t" title="${esc(libur.get(s))}">${esc(libur.get(s))}</span>`] : []),
     ].join('');
     g.insertAdjacentHTML('beforeend', `<div class="day ${di.st} ${s === todayIso() ? 'today' : ''}" data-date="${s}" title="${esc(di.why)}"><span class="n">${dd}</span>${tags}</div>`);
@@ -559,12 +564,11 @@ const schedule = guard(async (dokId, date) => {
   const d = dokOf(dokId); if (!d) return;
   const c = check(d, date);
   if (!c.ok) return toast('Tidak bisa: ' + c.why, 5000);
-  if (c.soft && !confirm(c.soft + '. Tetap jadwalkan?')) return;
   const sprint = Math.max(0, 0) || (prevWorkday(date) > d.tgl_dokumen ? prevWorkday(date) : date);
   const g = kegOfDok(dokId)[0] || { id: uid(), dokumen_id: dokId };
   await upsert('Kegiatan', { ...g, tgl_pel: date, tgl_sprint: g.tgl_sprint && g.tgl_sprint >= d.tgl_dokumen && g.tgl_sprint <= date ? g.tgl_sprint : sprint, staf: g.staf || '', hasil: g.hasil || '' });
   ui.sel = null; renderKalender();
-  const k = klienOf(d.klien_id); toast(`${k ? k.nama : ''}: pelaksanaan ${Doc.hari(date)}, ${Doc.tgl(date)}`);
+  const k = klienOf(d.klien_id); toast(`${k ? k.nama : ''}: pelaksanaan ${Doc.hari(date)}, ${Doc.tgl(date)}${c.noMonev ? ' (tanpa jatah monev)' : ''}`, c.noMonev ? 6000 : 3500);
 });
 
 function openKegiatan(g) {
@@ -599,8 +603,8 @@ function renderUnduh() {
   box.innerHTML = list.map(g => {
     const it = itemFor(g);
     return `<div class="krow" data-id="${g.id}"><input type="checkbox" class="pc" checked>
-      <div><b>${esc(it.k.nama)}</b><br><span class="tag ${it.keg.jenis === 'PUTUSAN' ? 'b' : ''}">${esc(it.stCode(d))}</span>${KEG_LABEL[it.keg.jenis]}<br><small class="hint">${Doc.hari(g.tgl_pel)}, ${Doc.tgl(g.tgl_pel)} · sprint ${Doc.tgl(g.tgl_sprint)}</small></div>
-      <div><div class="drop">Seret foto ke sini atau <u>klik untuk memilih</u><input type="file" accept="image/*" multiple hidden></div><div class="thumbs"></div></div></div>`;
+      <div><b>${esc(it.k.nama)}</b><br><span class="tag ${it.keg.jenis === 'PUTUSAN' ? 'b' : ''}">${esc(stCode(it.d))}</span>${KEG_LABEL[it.keg.jenis]}<br><small class="hint">${Doc.hari(g.tgl_pel)}, ${Doc.tgl(g.tgl_pel)} · sprint ${Doc.tgl(g.tgl_sprint)}</small></div>
+      <div><div class="row" style="margin-bottom:8px"><button class="pri sm" data-do="sp">Pratinjau SP</button><button class="pri sm" data-do="lap">Pratinjau Laporan</button></div><div class="drop">Seret foto ke sini atau <u>klik untuk memilih</u><input type="file" accept="image/*" multiple hidden></div><div class="thumbs"></div></div></div>`;
   }).join('') || '<p class="hint">Belum ada kegiatan terjadwal. Jadwalkan di tab Kalender.</p>';
   $$('.krow', box).forEach(row => {
     const id = row.dataset.id, g = data.kegiatan.find(x => x.id === id), drop = $('.drop', row), inp = $('input[type=file]', row), th = $('.thumbs', row);
@@ -625,6 +629,7 @@ function renderUnduh() {
     ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
     drop.addEventListener('drop', e => add(e.dataTransfer.files));
     draw();
+    $$('[data-do]', row).forEach(b => b.onclick = guard(async () => (b.dataset.do === 'sp' ? previewSp : previewLap)(itemById(id))));
   });
   const last = list.length ? list[list.length - 1].tgl_pel : todayIso();
   if (!$('#p-tglbon').dataset.set) $('#p-tglbon').value = addDays(last, 1);
@@ -640,7 +645,6 @@ function chosen() {
 }
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
 const safe = s => s.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, ' ').slice(0, 40);
-function busy(btn, fn) { btn.onclick = guard(async () => { const it = chosen(); if (!it.length) return; btn.disabled = true; try { await fn(it); } finally { btn.disabled = false; } }); }
 function pkCheck(it, date) {
   const miss = it.filter(x => !pkOf(x.pk_id) || !riwayatAt(x.pk_id, date(x)));
   if (miss.length) { toast('Data PK belum lengkap untuk: ' + [...new Set(miss.map(x => x.k.nama))].join(', ') + '. Isi di tab "PK & Kepala".', 6000); return false; }
@@ -649,25 +653,46 @@ function pkCheck(it, date) {
 }
 const spDate = x => x.keg.tgl_sp || x.keg.tgl_pel;
 
-busy($('#p-sp'), async it => {
-  if (!pkCheck(it, spDate)) return;
-  const one = x => Doc.sp(x.keg, x.k, sFor(x.pk_id, spDate(x)));
-  if (it.length === 1) return download(await one(it[0]), `SP ${safe(it[0].k.nama)}.docx`);
-  const zip = new JSZip();
-  for (const x of it) zip.file(`SP ${x.keg.tgl_pel} ${safe(x.k.nama)}.docx`, await one(x));
-  download(await zip.generateAsync({ type: 'blob' }), 'SP Pendampingan.zip');
-});
-busy($('#p-bon'), async it => {
+// Pratinjau dokumen satuan: dilihat dulu, lalu diunduh sebagai PDF (atau Word bila perlu disunting)
+function showPreview(o) {
+  const dlg = $('#pv'), body = $('#pv-body');
+  $('#pv-t').textContent = o.title;
+  body.innerHTML = o.html;
+  const doc = body.firstElementChild;
+  dlg.showModal();
+  if (doc) doc.style.zoom = Math.min(1, (body.clientWidth - 28) / (215.9 * 3.7795));
+  const pdf = $('#pv-pdf'), word = $('#pv-docx');
+  const run = (btn, label, fn) => async () => {
+    if (btn.disabled) return;
+    const l0 = btn.textContent; pdf.disabled = word.disabled = true; btn.textContent = label;
+    try { await fn(); } catch (e) { console.error(e); toast('Gagal: ' + e.message, 6000); }
+    finally { pdf.disabled = word.disabled = false; btn.textContent = l0; }
+  };
+  pdf.onclick = run(pdf, 'Membuat PDF…', () => PdfDoc.toPdf(o.html, o.filename));
+  word.onclick = run(word, 'Membuat Word…', async () => download(await o.docx(), o.filename.replace(/\.pdf$/i, '.docx')));
+}
+$('#pv-x').onclick = () => $('#pv').close();
+$('#pv').addEventListener('close', () => { $('#pv-body').innerHTML = ''; });
+
+const itemById = id => itemFor(data.kegiatan.find(g => g.id === id));
+function previewSp(x) {
+  if (!x || !pkCheck([x], spDate)) return;
+  const s = sFor(x.pk_id, spDate(x));
+  showPreview({ title: `Surat Perintah · ${x.k.nama}`, html: PdfDoc.sp(x.keg, x.k, s), filename: `SP ${safe(x.k.nama)}.pdf`, docx: () => Doc.sp(x.keg, x.k, s) });
+}
+function previewLap(x) {
+  if (!x || !pkCheck([x], y => y.keg.tgl_pel)) return;
+  const s = sFor(x.pk_id, x.keg.tgl_pel);
+  showPreview({ title: `Laporan · ${x.k.nama}`, html: PdfDoc.laporan(x, s), filename: `Laporan ${safe(x.k.nama)} ${x.keg.tgl_pel}.pdf`, docx: () => Doc.laporan([{ ...x, s }], data.settings) });
+}
+$('#p-bon').onclick = guard(async () => {
+  const it = chosen(); if (!it.length) return;
   const tglBon = $('#p-tglbon').value || todayIso();
   if (new Set(it.map(x => x.pk_id)).size > 1) return toast('BON hanya untuk satu PK. Centang kegiatan milik satu PK saja.', 6000);
   if (!pkCheck(it, () => tglBon)) return;
-  download(await Doc.bon(it, sFor(it[0].pk_id, tglBon), tglBon), 'Bon Pendampingan Dewasa.docx');
+  const s = sFor(it[0].pk_id, tglBon);
+  showPreview({ title: `BON · ${it.length} kegiatan`, html: PdfDoc.bon(it, s, tglBon), filename: `BON ${tglBon}.pdf`, docx: () => Doc.bon(it, s, tglBon) });
 });
-busy($('#p-lap'), async it => {
-  if (!pkCheck(it, x => x.keg.tgl_pel)) return;
-  download(await Doc.laporan(it.map(x => ({ ...x, s: sFor(x.pk_id, x.keg.tgl_pel) })), data.settings), 'Laporan Pendampingan Dewasa.docx');
-});
-
 // ============================================================ PENGATURAN
 $('#b-set').onclick = () => {
   const s = data.settings;

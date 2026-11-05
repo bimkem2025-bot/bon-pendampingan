@@ -40,9 +40,10 @@
     </aside>
     <div class="pane">
       <div class="calbar"><button id="c-prev" class="ghost">‹</button><h2 id="c-judul"></h2><button id="c-next" class="ghost">›</button>
-        <button id="c-today" class="ghost">Hari ini</button><button id="c-saran">Saran tanggal</button><button id="c-ext" class="ghost" title="Muat ulang jadwal PK lain">↻ Jadwal PK lain</button></div>
+        <button id="c-today" class="ghost">Hari ini</button><button id="c-saran">Saran tanggal</button><button id="c-ext" title="Tarik ulang data jatah monev dari Google Sheet jadwal PK">↻ Tarik jatah monev dari sheet</button></div>
       <div id="c-grid"></div>
-      <div class="legend"><i class="l-free"></i>idle <i class="l-ext"></i>PK lain <i class="l-me"></i>jadwal Anda <i class="l-off"></i>libur/akhir pekan <i class="l-un"></i>tidak ada di sheet</div>
+      <div class="legend"><i class="l-free"></i>idle (jatah monev ada) <i class="l-ext"></i>jatah monev terisi PK lain (tetap bisa dipilih) <i class="l-me"></i>jadwal Anda <i class="l-off"></i>libur / cuti bersama / akhir pekan</div>
+      <p class="hint" id="c-info"></p>
     </div>
   </section>
 
@@ -51,18 +52,21 @@
       <div class="row between"><h2>Unduh dokumen</h2>
         <div class="row"><select id="p-bulan"></select><label class="inline">Tgl BON <input type="date" id="p-tglbon"></label></div></div>
       <div id="p-list"></div>
-      <div class="row sticky"><button id="p-sp" class="pri">SP (zip)</button><button id="p-bon" class="pri">BON</button><button id="p-lap" class="pri">Laporan</button><span class="hint" id="p-info"></span></div>
+      <div class="row sticky"><button id="p-bon" class="pri">Pratinjau BON (yang dicentang)</button><span class="hint" id="p-info"></span><span class="hint">SP dan Laporan: pratinjau &amp; unduh PDF satu per satu di tiap baris.</span></div>
     </div>
   </section>
 </main>
 
 <dialog id="dlg"><form method="dialog" id="dlg-form"></form></dialog>
+<dialog id="pv"><div class="pv-bar"><b id="pv-t"></b><span class="grow"></span><button type="button" id="pv-pdf" class="pri">Unduh PDF</button><button type="button" id="pv-docx">Unduh Word</button><button type="button" id="pv-x" class="ghost">Tutup</button></div><div id="pv-body"></div></dialog>
 <div id="toast" hidden></div>
 <div id="lock" popover="manual"><div class="spin"></div><span id="lock-t">Memproses…</span></div>
 
 <script src="lib/jszip.min.js"></script>
 <script src="holidays.js"></script>
+<script src="lib/html2pdf.bundle.min.js"></script>
 <script src="docgen.js"></script>
+<script src="pdfdoc.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

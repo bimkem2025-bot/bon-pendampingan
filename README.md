@@ -11,26 +11,21 @@ Dokumen dibuat di browser; foto tidak pernah diunggah. Repo ini hanya berisi kod
    Tanggal pelaksanaan tidak boleh lebih awal dari tanggal alih status.
 4. **Dokumen hukum**: pilih dulu status yang mana, lalu isi SP Han/putusan/penetapan beserta tanggalnya.
 5. **Kalender**: seret klien ke tanggal (atau klik lalu klik tanggal); *Saran tanggal* memilih hari idle terdekat.
-6. **Unduh**: centang kegiatan, seret foto, unduh SP (zip), BON (satu PK), Laporan.
+6. **Unduh**: per kegiatan tekan *Pratinjau SP* / *Pratinjau Laporan* (seret foto ke baris itu), lihat hasilnya, lalu *Unduh PDF* satu per satu (Word tetap tersedia untuk disunting). BON: centang kegiatan satu PK, *Pratinjau BON*. PDF berukuran F4 dengan kop seperti project Reg-2026 (`assets/kop.png`, `pdfdoc.js`, html2pdf).
 
 ## Aturan tanggal
 - Tanggal dokumen < tanggal pelaksanaan; tanggal alih status ≤ tanggal pelaksanaan.
 - Tanggal dokumen ≤ tanggal sprint ≤ tanggal pelaksanaan.
-- Hari kerja non-libur, satu kegiatan per hari, dan hari yang belum dipilih PK lain (sheet "Kontrol Surat Tugas", ID di Pengaturan).
-  Hari kerja tanpa baris di sheet ditandai kuning (boleh dipilih setelah konfirmasi).
+- Yang menghalangi hanya: akhir pekan, libur nasional/cuti bersama (daftar di Pengaturan), dan jadwal Anda sendiri di hari itu.
+- Sheet "Kontrol Surat Tugas" hanyalah **kuota monev**. Tanggal yang sudah terisi PK lain artinya jatah monev hari itu terpakai; kegiatan tetap boleh dilaksanakan, hanya tanpa jatah monev. Tanggal yang tidak ada di sheet = idle. Tombol **↻ Tarik jatah monev dari sheet** di Kalender mengambil data terbaru. "Saran tanggal" mengutamakan hari yang masih punya jatah monev.
 
 ## Menyimpan data (Google Sheets)
-Data utama ada di Google Sheet Anda; browser hanya menyimpan salinan cadangan. Pengaturan (⚙) → **Buat kode skrip** menyiapkan kode Apps Script lengkap dengan kata sandi:
-1. Google Sheet baru → **Extensions → Apps Script**, tempel kode, Save.
-2. **Deploy → New deployment → Web app**: *Execute as: Me*, *Access: Anyone*. Salin URL `/exec`.
-3. Tempel URL di Pengaturan → Simpan. Tab Klien, Status, Dokumen, Kegiatan, PK, PKRiwayat, Kepala dibuat otomatis, dan data yang sudah ada di browser ikut terkirim.
-
-Data hanya terbaca bila membawa kata sandi yang benar. Ekspor/impor JSON tersedia di Pengaturan.
+Backend Google Sheets sudah tertanam di aplikasi; yang diisi sekali per perangkat hanya kata sandi. Browser menyimpan salinan cadangan dan langsung menampilkannya saat dibuka, lalu menyegarkan dari Sheet di latar belakang. Ekspor/impor JSON ada di Pengaturan. Deploy kode skrip: `powershell -File tools\push-script.ps1` (clasp, konfigurasi rahasia di `apps-script/.local.json`).
 ## Template dokumen
 `templates/*.docx` dibuat dari dokumen asli: `python tools/build_templates.py <folder-dokumen-asli>` (butuh `lxml`).
 Skrip membuang data klien dan nama penulis, lalu memasang tag `{nama}` dst. Dokumen asli jangan di-commit (sudah di `.gitignore`).
 `${nomor_naskah}` dan `${ttd_pengirim}` di SP sengaja dibiarkan (diisi sistem e-office).
 
 ## Uji
-`node tools/test_docgen.js` menghasilkan contoh dokumen di `out/` (perlu `out/foto.jpg` sembarang JPEG).
+`node tools/test_logic.js` (aturan tanggal, PK/Kepala, muat backend) dan `node tools/test_docgen.js` menghasilkan contoh dokumen di `out/` (perlu `out/foto.jpg` sembarang JPEG).
 

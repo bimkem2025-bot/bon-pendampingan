@@ -9,7 +9,7 @@ const ctx = {
 };
 ctx.window = ctx; vm.createContext(ctx);
 const src = ['holidays.js', 'docgen.js', 'app.js'].map(f => fs.readFileSync(f, 'utf8')).join('\n');
-const EXPOSE = '\n;globalThis.T={data:()=>data,setData:d=>data=d,check,suggest,sFor,kepalaAt,riwayatAt,pangkatOf,libur:()=>libur,buildLibur,itemFor,load,banner:()=>banner.err,saved:()=>store};';
+const EXPOSE = '\n;globalThis.T={setExt:e=>ext=e,dayInfo,DEFAULT_LIBUR,data:()=>data,setData:d=>data=d,check,suggest,sFor,kepalaAt,riwayatAt,pangkatOf,libur:()=>libur,buildLibur,itemFor,load,banner:()=>banner.err,saved:()=>store};';
 vm.runInContext(src.replace(/guard\(async \(\) => \{ await load\(\);[\s\S]*$/, '') + EXPOSE, ctx);
 const T = ctx.T; const assert = require('assert');
 T.setData({ klien: [{ id: 'k', nama: 'A', tempat_lahir: 'X', tgl_lahir: '1990-01-01' }], status: [{ id: 's1', klien_id: 'k', status: 'AIII', tgl_alih: '2026-11-16', layanan: 'HAK', pk_id: 'p' }],
@@ -26,7 +26,16 @@ assert.strictEqual(T.sFor('p', '2026-03-01').sp_pk_pangkat, 'Penata Muda / III/a
 assert.strictEqual(T.sFor('p', '2026-07-01').sp_pk_jabatan, 'Pembimbing Kemasyarakatan Ahli Muda');
 assert.strictEqual(T.sFor('p', '2026-03-01').kepala_nama, 'Kepala Lama');
 assert.strictEqual(T.sFor('p', '2026-10-01').kepala_nama, 'Kepala Baru');
-// muat dari backend palsu: baris kembar harus melebur dan tidak ada galat
+// jatah monev: tanggal terisi PK lain tetap boleh; tanggal yang tidak ada di sheet = idle; libur/cuti bersama tetap menghalangi
+T.setExt({ rows: [{ tgl: '2026-11-17', nama: 'Klien X', pk: 'Ani' }], t: 1 });
+assert.strictEqual(T.check(d, '2026-11-17').ok, true, 'monev terisi PK lain tidak boleh menghalangi');
+assert.ok(T.check(d, '2026-11-17').noMonev, 'harus ditandai tanpa jatah monev');
+assert.strictEqual(T.dayInfo('2026-11-18').st, 'free', 'tanggal tak ada di sheet = idle');
+assert.strictEqual(T.suggest(d, '2026-11-17'), '2026-11-18', 'saran memilih hari yang masih punya jatah monev');
+T.data().settings.libur = T.DEFAULT_LIBUR; T.buildLibur();
+assert.strictEqual(T.check(d, '2026-12-24').ok, false, 'cuti bersama Natal menghalangi');
+assert.strictEqual(T.check(d, '2026-12-23').ok, true);
+T.data().settings.libur = ''; T.buildLibur();// muat dari backend palsu: baris kembar harus melebur dan tidak ada galat
 (async () => {
   const calls = [];
   ctx.fetch = async (u, o) => { const b = JSON.parse(o.body); calls.push(b.action); return { json: async () => b.action === 'all' ? { ok: true, klien: [{ id: 'k1', nama: 'Dobel' }, { id: 'k1', nama: 'Dobel' }, { id: 'k2', nama: 'Lain' }], status: [], dokumen: [], kegiatan: [], pk: [], riwayat: [], kepala: [], settings: null } : { ok: true } }; };
