@@ -247,7 +247,13 @@ const pkGroup = id => { const p = data.pk.find(x => x.id === id); return p ? dat
 const riwayatGrup = id => { const g = pkGroup(id); return data.riwayat.filter(r => g.includes(r.pk_id)).sort((a, b) => a.mulai.localeCompare(b.mulai)); };
 function riwayatAt(pkId, date) { const l = riwayatGrup(pkId); return [...l].reverse().find(r => r.mulai <= date) || l[0]; }
 function kepalaAt(date) { const l = [...data.kepala].sort((a, b) => a.mulai.localeCompare(b.mulai)); return [...l].reverse().find(r => r.mulai <= date) || l[0]; }
-const pangkatOf = gol => PANGKAT[gol] ? `${PANGKAT[gol]} / ${gol}` : gol;
+// buang gelar akademik/keagamaan dari nama: "Budi Santoso, S.H., M.H." -> "Budi Santoso"
+function tanpaGelar(n) {
+  let s = String(n || '').split(',')[0].trim();
+  s = s.replace(/^((Prof|Dr|Drs|Dra|Ir|H|Hj)\.?\s+)+/i, '');
+  s = s.replace(/(\s+(S|M|A|Dr|Drs|Dra|Ir)\.[A-Za-z.]*)+$/, '');
+  return s.trim();
+}const pangkatOf = gol => PANGKAT[gol] ? `${PANGKAT[gol]} / ${gol}` : gol;
 // nama PK + jabatan + golongan yang berlaku pada tanggal tsb (supaya PK/APK dengan nama mirip tidak tertukar)
 const pkLabel = (p, date) => {
   const r = riwayatAt(p.id, date || todayIso());
@@ -262,6 +268,8 @@ function sFor(pkId, date) {
     s.sp_pk_nama = pk.nama; s.sp_pk_nip = pk.nip;
     if (r) { s.pk_label = TIPE_LABEL[r.tipe] || TIPE_LABEL.PK; s.sp_pk_pangkat = pangkatOf(r.golongan); s.sp_pk_jabatan = jabatanOf(r); }
   }
+  // aturan internal: gelar tidak ditampilkan di dokumen
+  ['kepala_nama', 'ppk_nama', 'pk_nama_gelar', 'pk_nama', 'sp_pk_nama'].forEach(k => { if (s[k]) s[k] = tanpaGelar(s[k]); });
   return s;
 }
 const perkaraOf = (k, d) => [k.perkara, k.pasal].filter(Boolean).join('/ ') || (d && d.perkara) || '';

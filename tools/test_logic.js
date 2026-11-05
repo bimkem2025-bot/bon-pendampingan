@@ -9,7 +9,7 @@ const ctx = {
 };
 ctx.window = ctx; vm.createContext(ctx);
 const src = ['holidays.js', 'docgen.js', 'app.js'].map(f => fs.readFileSync(f, 'utf8')).join('\n');
-const EXPOSE = '\n;globalThis.T={setExt:e=>ext=e,dayInfo,DEFAULT_LIBUR,data:()=>data,setData:d=>data=d,check,suggest,sFor,kepalaAt,riwayatAt,pangkatOf,libur:()=>libur,buildLibur,itemFor,load,banner:()=>banner.err,saved:()=>store};';
+const EXPOSE = '\n;globalThis.T={tanpaGelar,setExt:e=>ext=e,dayInfo,DEFAULT_LIBUR,data:()=>data,setData:d=>data=d,check,suggest,sFor,kepalaAt,riwayatAt,pangkatOf,libur:()=>libur,buildLibur,itemFor,load,banner:()=>banner.err,saved:()=>store};';
 vm.runInContext(src.replace(/guard\(async \(\) => \{ await load\(\);[\s\S]*$/, '') + EXPOSE, ctx);
 const T = ctx.T; const assert = require('assert');
 T.setData({ klien: [{ id: 'k', nama: 'A', tempat_lahir: 'X', tgl_lahir: '1990-01-01' }], status: [{ id: 's1', klien_id: 'k', status: 'AIII', tgl_alih: '2026-11-16', layanan: 'HAK', pk_id: 'p' }],
@@ -32,7 +32,12 @@ T.data().riwayat.push({ id: 'r3', pk_id: 'p2', mulai: '2026-10-01', golongan: 'I
 assert.strictEqual(T.sFor('p', '2026-08-01').sp_pk_pangkat, 'Penata Muda Tk.I / III/b');
 assert.strictEqual(T.sFor('p', '2026-10-15').sp_pk_pangkat, 'Penata / III/c');
 assert.strictEqual(T.sFor('p', '2026-10-15').pk_label, 'Asisten Pembimbing Kemasyarakatan');
-assert.strictEqual(T.sFor('p2', '2026-08-01').sp_pk_pangkat, 'Penata Muda Tk.I / III/b', 'pilih catatan mana pun hasilnya sama');// jatah monev: tanggal terisi PK lain tetap boleh; tanggal yang tidak ada di sheet = idle; libur/cuti bersama tetap menghalangi
+assert.strictEqual(T.sFor('p2', '2026-08-01').sp_pk_pangkat, 'Penata Muda Tk.I / III/b', 'pilih catatan mana pun hasilnya sama');// gelar tidak ditampilkan di dokumen
+assert.strictEqual(T.tanpaGelar('Dr. H. Ahmad Fauzi, S.H., M.H.'), 'Ahmad Fauzi');
+assert.strictEqual(T.tanpaGelar('Siti Aminah S.Sos M.Si'), 'Siti Aminah');
+assert.strictEqual(T.tanpaGelar('Budi Santoso'), 'Budi Santoso');
+assert.strictEqual(T.sFor('p', '2026-08-01').pk_nama_gelar, 'Budi');
+// jatah monev: tanggal terisi PK lain tetap boleh; tanggal yang tidak ada di sheet = idle; libur/cuti bersama tetap menghalangi
 T.setExt({ rows: [{ tgl: '2026-11-17', nama: 'Klien X', pk: 'Ani' }], t: 1 });
 assert.strictEqual(T.check(d, '2026-11-17').ok, true, 'monev terisi PK lain tidak boleh menghalangi');
 assert.ok(T.check(d, '2026-11-17').noMonev, 'harus ditandai tanpa jatah monev');
