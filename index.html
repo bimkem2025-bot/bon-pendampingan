@@ -11,12 +11,14 @@
   <div class="brand"><span class="dot"></span>Bon Pendampingan</div>
   <nav id="tabs">
     <button data-tab="klien" class="on">Klien &amp; Dokumen</button>
+    <button data-tab="pejabat">PK &amp; Kepala</button>
     <button data-tab="kalender">Kalender</button>
     <button data-tab="unduh">Unduh</button>
   </nav>
   <div class="right"><span id="status"></span><button id="b-set" class="ghost" title="Pengaturan">⚙</button></div>
 </header>
 
+<div id="banner" hidden></div>
 <main>
   <section id="tab-klien">
     <aside class="side">
@@ -24,6 +26,10 @@
       <div id="k-list" class="list"></div>
     </aside>
     <div id="k-detail" class="pane"></div>
+  </section>
+
+  <section id="tab-pejabat" hidden>
+    <div class="pane wide" id="pj"></div>
   </section>
 
   <section id="tab-kalender" hidden>
@@ -59,3 +65,4 @@
 <script src="app.js"></script>
 </body>
 </html>
+

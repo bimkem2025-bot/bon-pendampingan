@@ -10,26 +10,27 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 
 const DOC_LABEL = { SP_HAN: 'Surat Penahanan (SP Han)', PUTUSAN_PN: 'Putusan Pengadilan Negeri', PUTUSAN_PT: 'Putusan Pengadilan Tinggi', PUTUSAN_MA: 'Putusan Mahkamah Agung', PENETAPAN: 'Penetapan' };
 const DOC_SHORT = { SP_HAN: 'SP Han', PUTUSAN_PN: 'Putusan PN', PUTUSAN_PT: 'Putusan PT', PUTUSAN_MA: 'Putusan MA', PENETAPAN: 'Penetapan' };
-const KEG_LABEL = { HAK: 'Pemenuhan Hak', PUTUSAN: 'Pelaksanaan Putusan' };
-const kind = status => /^\s*b/i.test(status || '') ? 'PUTUSAN' : 'HAK'; // A* = tahanan, B* = narapidana
+const KEG_LABEL = { HAK: 'Pemenuhan Hak Tahanan', PUTUSAN: 'Pelaksanaan Putusan' };
+const STATUS_SARAN = ['AI', 'AII', 'AIII', 'AIV', 'AV', 'BI', 'BIIa', 'BIIb', 'BIII'];
+const PANGKAT = { 'I/a': 'Juru Muda', 'I/b': 'Juru Muda Tk.I', 'I/c': 'Juru', 'I/d': 'Juru Tk.I', 'II/a': 'Pengatur Muda', 'II/b': 'Pengatur Muda Tk.I', 'II/c': 'Pengatur', 'II/d': 'Pengatur Tk.I', 'III/a': 'Penata Muda', 'III/b': 'Penata Muda Tk.I', 'III/c': 'Penata', 'III/d': 'Penata Tk.I', 'IV/a': 'Pembina', 'IV/b': 'Pembina Tk.I', 'IV/c': 'Pembina Utama Muda', 'IV/d': 'Pembina Utama Madya', 'IV/e': 'Pembina Utama' };
+const JENJANG = { PK: ['Ahli Pertama', 'Ahli Muda', 'Ahli Madya', 'Ahli Utama'], APK: ['Terampil', 'Mahir', 'Penyelia'] };
+const TIPE_LABEL = { PK: 'Pembimbing Kemasyarakatan', APK: 'Asisten Pembimbing Kemasyarakatan' };
 const EXT_ID_DEFAULT = '12Y_RCIY0F4sH0qrbU0pHgbQ2W1m_2ZQctJrQgBIHK_c';
 const BULAN_TAB = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
 const SETTING_FIELDS = [
-  ['pk_nama_gelar', 'Nama PK (lengkap + gelar)'], ['pk_nama', 'Nama PK singkat'], ['pk_nip', 'NIP PK'], ['pk_alias', 'Nama PK di sheet jadwal (mis. Tuffa)'],
-  ['ppk_nama', 'Nama PPK'], ['ppk_nip', 'NIP PPK'], ['kepala_nama', 'Nama Kepala Bapas'],
-  ['sp_pk_nama', 'PK di SP: nama'], ['sp_pk_nip', 'PK di SP: NIP'], ['sp_pk_pangkat', 'PK di SP: pangkat'], ['sp_pk_jabatan', 'PK di SP: jabatan'],
+  ['ppk_nama', 'Nama PPK'], ['ppk_nip', 'NIP PPK'],
   ['uang', 'Besar uang per kegiatan (Rp)'], ['tempat', 'Tempat default'], ['staf_hak', 'Petugas default: Hak Tahanan'], ['staf_putusan', 'Petugas default: Pelaksanaan Putusan'],
   ['ext_id', 'ID Google Sheet jadwal PK lain'],
 ];
 const DEFAULT_SETTINGS = {
-  pk_nama_gelar: '', pk_nama: '', pk_nip: '', pk_alias: '', ppk_nama: '', ppk_nip: '', kepala_nama: '',
-  sp_pk_nama: '', sp_pk_nip: '', sp_pk_pangkat: '', sp_pk_jabatan: '',
+  ppk_nama: '', ppk_nip: '',
   uang: 170000, tempat: 'Lapas Sintang', staf_hak: '', staf_putusan: '', ext_id: EXT_ID_DEFAULT, libur: DEFAULT_LIBUR,
 };
-const SHEETS = { Klien: 'klien', Dokumen: 'dokumen', Kegiatan: 'kegiatan' };
+const SHEETS = { Klien: 'klien', Status: 'status', Dokumen: 'dokumen', Kegiatan: 'kegiatan', PK: 'pk', PKRiwayat: 'riwayat', Kepala: 'kepala' };
+const emptyData = () => ({ klien: [], status: [], dokumen: [], kegiatan: [], pk: [], riwayat: [], kepala: [], settings: { ...DEFAULT_SETTINGS } });
 
-let data = { klien: [], dokumen: [], kegiatan: [], settings: { ...DEFAULT_SETTINGS } };
+let data = emptyData();
 let ext = { rows: [], t: 0 };       // jadwal PK lain (dibaca langsung dari Google Sheet)
 let libur = new Map();
 const photos = new Map();           // kegiatan.id -> [{file,url,caption}]
@@ -48,30 +49,69 @@ function status(t) { $('#status').textContent = t; }
 function toast(t, ms = 3500) { const e = $('#toast'); e.textContent = t; e.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => e.hidden = true, ms); }
 const guard = fn => async (...a) => { try { return await fn(...a); } catch (e) { console.error(e); toast('Gagal: ' + e.message, 6000); } };
 
+const readLocal = () => { try { return JSON.parse(localStorage.getItem('bon_data') || 'null'); } catch { return null; } };
+const norm = d => { const o = emptyData(); Object.keys(SHEETS).forEach(s => o[SHEETS[s]] = (d && d[SHEETS[s]]) || []); o.settings = { ...DEFAULT_SETTINGS, ...((d && d.settings) || {}) }; return o; };
+function banner() {
+  const b = $('#banner');
+  if (remote() && !banner.err) { b.hidden = true; return; }
+  b.hidden = false; b.className = '';
+  b.innerHTML = banner.err ? `<span>⚠ Gagal terhubung ke Google Sheets (${esc(banner.err)}). Data yang tampil adalah salinan di browser ini.</span><button id="bn-set">Periksa koneksi</button>`
+    : `<span>⚠ Belum tersambung ke Google Sheets: data hanya di browser ini dan bisa hilang. Sambungkan sekarang (±3 menit), data yang sudah ada ikut terkirim otomatis.</span><button class="pri" id="bn-set">Sambungkan</button>`;
+  $('#bn-set').onclick = () => $('#b-set').click();
+}
 async function load() {
+  const local = readLocal();
+  banner.err = '';
   if (remote()) {
     status('Memuat dari Google Sheets…');
-    const j = await api({ action: 'all' });
-    data = { klien: j.klien, dokumen: j.dokumen || [], kegiatan: j.kegiatan, settings: { ...DEFAULT_SETTINGS, ...(j.settings || {}) } };
-    status('Tersambung: Google Sheets Anda');
-  } else {
-    const d = JSON.parse(localStorage.getItem('bon_data') || 'null');
-    if (d) data = { klien: d.klien || [], dokumen: d.dokumen || [], kegiatan: d.kegiatan || [], settings: { ...DEFAULT_SETTINGS, ...d.settings } };
-    status('Data tersimpan di browser ini');
-  }
-  buildLibur();
+    try {
+      const j = await api({ action: 'all' });
+      const remoteData = norm(j); if (!j.settings) remoteData.settings = { ...DEFAULT_SETTINGS, ...((local && local.settings) || {}) };
+      data = remoteData;
+      await syncUp(local);
+      status('Tersambung: Google Sheets Anda');
+    } catch (e) { banner.err = e.message; data = norm(local); status('Offline: salinan lokal'); }
+  } else { data = norm(local); status('Belum tersambung ke Sheets'); }
+  migrateLegacy();
+  saveLocal(); buildLibur(); banner();
+  flushLegacy().catch(e => console.error(e));
 }
+// kirim baris lokal yang belum ada di Sheets (migrasi data yang sudah diketik sebelum tersambung)
+async function syncUp(local) {
+  if (!local) return;
+  let n = 0;
+  for (const sh of Object.keys(SHEETS)) {
+    const have = new Set((data[SHEETS[sh]] || []).map(x => x.id)), rows = (local[SHEETS[sh]] || []).filter(x => x.id && !have.has(x.id));
+    if (!rows.length) continue;
+    for (let i = 0; i < rows.length; i += 40) await api({ action: 'bulk', sheet: sh, rows: rows.slice(i, i + 40) });
+    data[SHEETS[sh]].push(...rows); n += rows.length;
+  }
+  if (local.settings && !Object.keys(data.settings).some(k => k !== 'libur' && data.settings[k] && data.settings[k] !== DEFAULT_SETTINGS[k])) { data.settings = { ...data.settings, ...local.settings }; await api({ action: 'settings', settings: data.settings }); }
+  if (n) toast(`${n} data lokal dikirim ke Google Sheets.`, 6000);
+}
+// dokumen lama yang masih membawa status_klien ketikan -> jadikan entitas Status
+function migrateLegacy() {
+  data.dokumen.forEach(d => {
+    const code = d.status_klien;
+    if (d.status_id || !code) return;
+    let st = data.status.find(s => s.klien_id === d.klien_id && s.status === code);
+    if (!st) { st = { id: uid(), klien_id: d.klien_id, status: code, tgl_alih: d.tgl_dokumen || '', layanan: /^\s*b/i.test(code) ? 'PUTUSAN' : 'HAK', pk_id: (data.pk[0] || {}).id || '' }; data.status.push(st); legacyQ.push(['Status', st]); }
+    d.status_id = st.id; legacyQ.push(['Dokumen', d]);
+  });
+}
+const legacyQ = [];
+const hapus = (...a) => remove(...a);
+async function flushLegacy() { while (legacyQ.length) { const [s, r] = legacyQ.shift(); if (remote()) await api({ action: 'upsert', sheet: s, row: r }); } saveLocal(); }
 async function upsert(sheet, row) {
   const list = data[SHEETS[sheet]]; const i = list.findIndex(x => x.id === row.id);
   i >= 0 ? list[i] = row : list.push(row);
-  remote() ? await api({ action: 'upsert', sheet, row }) : saveLocal();
+  saveLocal(); if (remote()) await api({ action: 'upsert', sheet, row });
 }
 async function remove(sheet, id) {
   const k = SHEETS[sheet]; data[k] = data[k].filter(x => x.id !== id);
-  remote() ? await api({ action: 'remove', sheet, id }) : saveLocal();
+  saveLocal(); if (remote()) await api({ action: 'remove', sheet, id });
 }
-async function saveSettings() { remote() ? await api({ action: 'settings', settings: data.settings }) : saveLocal(); }
-
+async function saveSettings() { saveLocal(); if (remote()) await api({ action: 'settings', settings: data.settings }); }
 // ============================================================ jadwal PK lain
 function parseCsv(t) {
   const rows = []; let r = [], f = '', q = false;
@@ -142,10 +182,14 @@ function check(dok, date, exceptKegId) {
   const di = dayInfo(date, exceptKegId);
   if (di.st === 'off' || di.st === 'me' || di.st === 'ext') return { ok: false, why: di.why };
   if (dok && dok.tgl_dokumen && date <= dok.tgl_dokumen) return { ok: false, why: `Harus setelah tanggal dokumen (${Doc.tgl(dok.tgl_dokumen)})` };
+  const st = dok && stOf(dok);
+  if (dok && !st) return { ok: false, why: 'Dokumen belum terhubung ke status klien' };
+  if (st && st.tgl_alih && date < st.tgl_alih) return { ok: false, why: `Tidak boleh sebelum tanggal alih status ${st.status} (${Doc.tgl(st.tgl_alih)})` };
   return { ok: true, soft: di.st === 'un' ? di.why : '' };
 }
 function suggest(dok, from) {
   let d = from || todayIso(); if (dok && dok.tgl_dokumen && d <= dok.tgl_dokumen) d = addDays(dok.tgl_dokumen, 1);
+  const st = dok && stOf(dok); if (st && st.tgl_alih && d < st.tgl_alih) d = st.tgl_alih;
   for (let i = 0; i < 400; i++, d = addDays(d, 1)) { const c = check(dok, d); if (c.ok && !c.soft) return d; }
   return null;
 }
@@ -155,17 +199,39 @@ function prevWorkday(date) { let d = addDays(date, -1); for (let i = 0; i < 10; 
 const klienOf = id => data.klien.find(k => k.id === id);
 const dokOf = id => data.dokumen.find(d => d.id === id);
 const kegOfDok = id => data.kegiatan.filter(g => g.dokumen_id === id);
+const stOf = d => data.status.find(s => s.id === d.status_id);
+const kind = d => (stOf(d) || {}).layanan || 'HAK';
+const stCode = d => (stOf(d) || {}).status || '?';
+const pkOf = id => data.pk.find(p => p.id === id);
+function stLabel(s) { return `${s.status} · alih ${Doc.tgl(s.tgl_alih)} · ${KEG_LABEL[s.layanan]}`; }
 function dokLabel(d) { return `${DOC_SHORT[d.jenis] || d.jenis} ${d.nomor || ''} · ${Doc.tgl(d.tgl_dokumen)}`; }
+
+// data PK/Kepala yang berlaku pada tanggal tertentu (riwayat berperiode)
+const riwayatPk = pkId => data.riwayat.filter(r => r.pk_id === pkId).sort((a, b) => a.mulai.localeCompare(b.mulai));
+function riwayatAt(pkId, date) { const l = riwayatPk(pkId); return [...l].reverse().find(r => r.mulai <= date) || l[0]; }
+function kepalaAt(date) { const l = [...data.kepala].sort((a, b) => a.mulai.localeCompare(b.mulai)); return [...l].reverse().find(r => r.mulai <= date) || l[0]; }
+const pangkatOf = gol => PANGKAT[gol] ? `${PANGKAT[gol]} / ${gol}` : gol;
+const jabatanOf = r => `${TIPE_LABEL[r.tipe] || TIPE_LABEL.PK} ${r.jenjang || ''}`.trim();
+function sFor(pkId, date) {
+  const pk = pkOf(pkId), r = pk && riwayatAt(pkId, date), kp = kepalaAt(date), s = { ...data.settings };
+  s.kepala_nama = kp ? kp.nama : '';
+  if (pk) {
+    s.pk_nama_gelar = pk.nama; s.pk_nama = pk.nama_singkat || pk.nama; s.pk_nip = pk.nip;
+    s.sp_pk_nama = pk.nama; s.sp_pk_nip = pk.nip;
+    if (r) { s.pk_label = TIPE_LABEL[r.tipe] || TIPE_LABEL.PK; s.sp_pk_pangkat = pangkatOf(r.golongan); s.sp_pk_jabatan = jabatanOf(r); }
+  }
+  return s;
+}
 function itemFor(g) {
   const d = dokOf(g.dokumen_id), k = klienOf(d && d.klien_id); if (!d || !k) return null;
-  const jenis = kind(d.status_klien), putusanDoc = d.jenis.startsWith('PUTUSAN') || d.jenis === 'PENETAPAN';
+  const st = stOf(d) || {}, jenis = kind(d), putusanDoc = d.jenis.startsWith('PUTUSAN') || d.jenis === 'PENETAPAN';
   const keg = {
-    jenis, status_klien: d.status_klien, tgl_sp: g.tgl_sprint, tgl_pel: g.tgl_pel, staf: g.staf,
+    jenis, status_klien: st.status || '', tgl_sp: g.tgl_sprint, tgl_pel: g.tgl_pel, staf: g.staf,
     putusan: d.nomor ? `${d.nomor} / ${Doc.tgl(d.tgl_dokumen)}` : '', pidana: d.pidana,
     dasar: `${DOC_LABEL[d.jenis] || 'Dokumen'} Nomor : ${d.nomor || '-'} Tanggal ${Doc.tgl(d.tgl_dokumen)}`,
     hasil: g.hasil, sudah_putusan: jenis === 'HAK' && putusanDoc ? '1' : '', tempat: d.tempat, ket: d.tempat ? 'Di ' + d.tempat : '',
   };
-  return { keg, k: { ...k, perkara: d.perkara }, g, d, photos: photos.get(g.id) || [] };
+  return { keg, k: { ...k, perkara: d.perkara }, g, d, st, pk_id: st.pk_id, photos: photos.get(g.id) || [] };
 }
 
 // ============================================================ tab
@@ -174,7 +240,7 @@ function showTab(t) {
   ui.tab = t;
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   $$('main > section').forEach(s => s.hidden = s.id !== 'tab-' + t);
-  ({ klien: renderKlien, kalender: renderKalender, unduh: renderUnduh })[t]();
+  ({ klien: renderKlien, pejabat: renderPejabat, kalender: renderKalender, unduh: renderUnduh })[t]();
 }
 
 // ============================================================ dialog
@@ -198,27 +264,40 @@ $('#k-baru').onclick = () => editKlien(null);
 function renderKlien() {
   const q = $('#k-cari').value.toLowerCase();
   $('#k-list').innerHTML = data.klien.filter(k => k.nama.toLowerCase().includes(q)).sort((a, b) => a.nama.localeCompare(b.nama))
-    .map(k => `<div class="item ${k.id === ui.klien ? 'on' : ''}" data-id="${k.id}"><b>${esc(k.nama)}</b><small>${data.dokumen.filter(d => d.klien_id === k.id).length} dokumen</small></div>`).join('')
+    .map(k => `<div class="item ${k.id === ui.klien ? 'on' : ''}" data-id="${k.id}"><b>${esc(k.nama)}</b><small>${data.status.filter(s => s.klien_id === k.id).map(s => s.status).join(', ') || 'belum ada status'} · ${data.dokumen.filter(d => d.klien_id === k.id).length} dokumen</small></div>`).join('')
     || '<p class="hint">Belum ada klien. Klik + untuk menambah.</p>';
   $$('#k-list .item').forEach(e => e.onclick = () => { ui.klien = e.dataset.id; renderKlien(); });
   const k = klienOf(ui.klien), pane = $('#k-detail');
   if (!k) { pane.innerHTML = '<p class="hint">Pilih klien di kiri, atau tambah klien baru.</p>'; return; }
   const docs = data.dokumen.filter(d => d.klien_id === k.id).sort((a, b) => (a.tgl_dokumen || '').localeCompare(b.tgl_dokumen || ''));
+  const sts = data.status.filter(s => s.klien_id === k.id).sort((a, b) => (a.tgl_alih || '').localeCompare(b.tgl_alih || ''));
   pane.innerHTML = `
     <div class="row between"><h2>${esc(k.nama)}</h2><div class="row"><button id="k-ubah">Ubah data</button><button id="k-hapus" class="danger">Hapus</button></div></div>
     <p class="hint">${esc(k.tempat_lahir)}, ${Doc.tgl(k.tgl_lahir)} · ${esc(k.agama)} · ${esc(k.pekerjaan)} · ${esc(k.alamat)}</p>
-    <div class="row between" style="margin-top:14px"><h3>Dokumen &amp; status</h3><button id="d-baru" class="pri">+ Dokumen</button></div>
+    <div class="row between" style="margin-top:14px"><h3>1. Perubahan status klien</h3><button id="s-baru" class="pri">+ Status</button></div>
+    <table><thead><tr><th>Status</th><th>Tgl alih status</th><th>Layanan</th><th>PK</th><th></th></tr></thead><tbody>
+    ${sts.map(s => `<tr><td><span class="tag ${s.layanan === 'PUTUSAN' ? 'b' : ''}">${esc(s.status)}</span></td><td>${Doc.tgl(s.tgl_alih)}</td><td>${KEG_LABEL[s.layanan]}</td><td>${esc((pkOf(s.pk_id) || {}).nama_singkat || (pkOf(s.pk_id) || {}).nama || '—')}</td>
+      <td style="white-space:nowrap"><button data-sed="${s.id}">Ubah</button> <button data-sdel="${s.id}" class="danger">×</button></td></tr>`).join('')
+      || '<tr><td colspan="5" class="hint">Belum ada status. Tambah status (mis. AIII) dengan tanggal alihnya; ini batas awal tanggal pelaksanaan.</td></tr>'}
+    </tbody></table>
+    <div class="row between" style="margin-top:18px"><h3>2. Dokumen hukum</h3><button id="d-baru" class="pri">+ Dokumen</button></div>
     <table><thead><tr><th>Dokumen</th><th>Status</th><th>Kegiatan</th><th></th></tr></thead><tbody>
     ${docs.map(d => {
-      const gs = kegOfDok(d.id), g = gs[0];
-      return `<tr><td>${esc(dokLabel(d))}<br><small class="hint">${esc(d.perkara)}</small></td><td><span class="tag ${kind(d.status_klien) === 'PUTUSAN' ? 'b' : ''}">${esc(d.status_klien)}</span></td>
-      <td>${KEG_LABEL[kind(d.status_klien)]}<br><small class="hint">${g && g.tgl_pel ? 'Dijadwalkan ' + Doc.tgl(g.tgl_pel) : 'Belum dijadwalkan'}</small></td>
+      const g = kegOfDok(d.id)[0];
+      return `<tr><td>${esc(dokLabel(d))}<br><small class="hint">${esc(d.perkara)}</small></td><td><span class="tag ${kind(d) === 'PUTUSAN' ? 'b' : ''}">${esc(stCode(d))}</span></td>
+      <td>${KEG_LABEL[kind(d)]}<br><small class="hint">${g && g.tgl_pel ? 'Dijadwalkan ' + Doc.tgl(g.tgl_pel) : 'Belum dijadwalkan'}</small></td>
       <td style="white-space:nowrap"><button data-ed="${d.id}">Ubah</button> <button data-del="${d.id}" class="danger">×</button></td></tr>`;
-    }).join('') || '<tr><td colspan="4" class="hint">Belum ada dokumen. Tambah dokumen sumber hukum (SP Han, putusan, penetapan).</td></tr>'}
+    }).join('') || '<tr><td colspan="4" class="hint">Belum ada dokumen. Tambah status dulu, lalu dokumen sumber hukum (SP Han, putusan, penetapan) untuk status itu.</td></tr>'}
     </tbody></table>`;
+  $('#s-baru').onclick = () => editStatus(null, k);
+  $$('[data-sed]', pane).forEach(b => b.onclick = () => editStatus(data.status.find(s => s.id === b.dataset.sed), k));
+  $$('[data-sdel]', pane).forEach(b => b.onclick = guard(async () => {
+    if (data.dokumen.some(d => d.status_id === b.dataset.sdel)) return toast('Status ini dipakai dokumen; hapus/ubah dokumennya dulu.');
+    if (confirm('Hapus status ini?')) { await remove('Status', b.dataset.sdel); renderKlien(); }
+  }));
   $('#k-ubah').onclick = () => editKlien(k);
   $('#k-hapus').onclick = guard(async () => {
-    if (data.dokumen.some(d => d.klien_id === k.id)) return toast('Hapus dulu dokumen klien ini.');
+    if (data.dokumen.some(d => d.klien_id === k.id) || data.status.some(s => s.klien_id === k.id)) return toast('Hapus dulu status dan dokumen klien ini.');
     if (confirm('Hapus ' + k.nama + '?')) { await remove('Klien', k.id); ui.klien = null; renderKlien(); }
   });
   $('#d-baru').onclick = () => editDokumen(null, k);
@@ -246,20 +325,118 @@ function editKlien(k) {
   async o => { const row = { id: k.id || uid(), ...o }; await upsert('Klien', row); ui.klien = row.id; renderKlien(); });
 }
 
+function editStatus(s, k) {
+  s = s || {};
+  if (!data.pk.length) { toast('Isi dulu data PK di tab "PK & Kepala".', 5000); return showTab('pejabat'); }
+  const last = data.status.filter(x => x.klien_id === k.id).sort((a, b) => b.tgl_alih.localeCompare(a.tgl_alih))[0];
+  dialog(`<h2>${s.id ? 'Ubah status' : 'Perubahan status'} · ${esc(k.nama)}</h2><div class="grid">
+    <label>Status (kode)<input name="status" list="st-saran" value="${esc(s.status)}" required placeholder="mis. AIII" autocomplete="off"><datalist id="st-saran">${STATUS_SARAN.map(x => `<option>${x}</option>`).join('')}</datalist></label>
+    ${field('tgl_alih', 'Tanggal alih status', s.tgl_alih, 'type="date" required')}
+    <label>Layanan pendampingan<select name="layanan">${Object.entries(KEG_LABEL).map(([v, l]) => `<option value="${v}" ${(s.layanan || (last && last.layanan === 'HAK' ? 'PUTUSAN' : 'HAK')) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label>PK pendamping<select name="pk_id">${data.pk.map(p => `<option value="${p.id}" ${(s.pk_id || (data.pk[0] || {}).id) === p.id ? 'selected' : ''}>${esc(p.nama_singkat || p.nama)}</option>`).join('')}</select></label></div>
+    <p class="hint">Tanggal alih status menjadi batas paling awal tanggal pelaksanaan pendampingan untuk status ini.</p>`,
+  async o => { await upsert('Status', { id: s.id || uid(), klien_id: k.id, ...o }); renderKlien(); });
+}
+
 function editDokumen(d, k) {
   d = d || {};
-  const f = dialog(`<h2>${d.id ? 'Ubah dokumen' : 'Dokumen baru'} · ${esc(k.nama)}</h2><div class="grid">
+  const sts = data.status.filter(s => s.klien_id === k.id).sort((a, b) => a.tgl_alih.localeCompare(b.tgl_alih));
+  if (!sts.length) return toast('Tambah dulu status klien (mis. AIII) sebelum mengisi dokumen hukum.', 5000);
+  dialog(`<h2>${d.id ? 'Ubah dokumen' : 'Dokumen baru'} · ${esc(k.nama)}</h2><div class="grid">
+    <div class="w2"><label>Untuk status<select name="status_id">${sts.map(s => `<option value="${s.id}" ${(d.status_id || sts[sts.length - 1].id) === s.id ? 'selected' : ''}>${esc(stLabel(s))}</option>`).join('')}</select></label></div>
     <label>Jenis dokumen<select name="jenis">${Object.entries(DOC_LABEL).map(([v, l]) => `<option value="${v}" ${d.jenis === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     ${field('nomor', 'Nomor dokumen', d.nomor)}
     ${field('tgl_dokumen', 'Tanggal dokumen', d.tgl_dokumen, 'type="date" required')}
-    ${field('status_klien', 'Status klien / no. register', d.status_klien, 'required placeholder="A2, BI, AV…"')}
-    <div class="w2">${field('perkara', 'Perkara', d.perkara, 'placeholder="Narkotika/ Pasal 114 (1) UU RI No. 35 Tahun 2009"')}</div>
     ${field('tempat', 'Tempat pendampingan', d.tempat || data.settings.tempat)}
-    ${field('pidana', 'Lama pidana (untuk putusan)', d.pidana, 'placeholder="03 (tiga) tahun"')}</div>
-    <p class="hint" id="kg-info"></p>`,
+    <div class="w2">${field('perkara', 'Perkara', d.perkara, 'placeholder="Narkotika/ Pasal 114 (1) UU RI No. 35 Tahun 2009"')}</div>
+    ${field('pidana', 'Lama pidana (untuk putusan)', d.pidana, 'placeholder="03 (tiga) tahun"')}</div>`,
   async o => { await upsert('Dokumen', { id: d.id || uid(), klien_id: k.id, ...o }); renderKlien(); });
-  const upd = () => { $('#kg-info').textContent = 'Kegiatan: ' + KEG_LABEL[kind(f.elements.status_klien.value)] + ' (A = tahanan, B = narapidana)'; };
-  f.elements.status_klien.oninput = upd; upd();
+}
+
+// ============================================================ PK & KEPALA
+function renderPejabat() {
+  const box = $('#pj');
+  const pkCard = p => {
+    const rs = riwayatPk(p.id);
+    return `<div class="card"><div class="row between"><div><b>${esc(p.nama)}</b><br><small class="hint">NIP ${esc(p.nip)}${p.alias ? ' · di sheet jadwal: ' + esc(p.alias) : ''}</small></div>
+      <div class="row"><button data-pk-ed="${p.id}">Ubah</button><button data-pk-up="${p.id}" class="pri">+ Perubahan pangkat/jenjang</button></div></div>
+      <table><thead><tr><th>Berlaku sejak</th><th>Pangkat / Gol.</th><th>Jabatan</th><th></th></tr></thead><tbody>
+      ${rs.map((r, i) => `<tr><td>${Doc.tgl(r.mulai)}${i ? '' : ' <small class="hint">(awal)</small>'}</td><td>${esc(pangkatOf(r.golongan))}</td><td>${esc(jabatanOf(r))}</td>
+        <td style="white-space:nowrap"><button data-rw-ed="${r.id}">Ubah</button> ${i ? `<button data-rw-del="${r.id}" class="danger">×</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+  };
+  const kp = [...data.kepala].sort((a, b) => a.mulai.localeCompare(b.mulai));
+  box.innerHTML = `<div class="row between"><h2>Pembimbing Kemasyarakatan (PK / APK)</h2><button id="pk-baru" class="pri">+ PK baru</button></div>
+    <p class="hint">Isi awal wajib lengkap. Bila dalam 1 tahun ada kenaikan pangkat atau jenjang, tambahkan perubahan dengan tanggal berlakunya; SP, BON, dan Laporan otomatis memakai data yang berlaku pada tanggal dokumen.</p>
+    ${data.pk.map(pkCard).join('') || '<p class="hint">Belum ada PK.</p>'}
+    <div class="row between"><h2>Kepala Bapas</h2>${kp.length < 2 ? '<button id="kp-baru" class="pri">+ Periode</button>' : ''}</div>
+    <p class="hint">Maksimal 2 periode berdasarkan tanggal mulai. Tanda tangan memakai Kepala yang berlaku pada tanggal dokumen.</p>
+    <div class="card"><table><thead><tr><th>Berlaku sejak</th><th>Nama</th><th>NIP</th><th></th></tr></thead><tbody>
+    ${kp.map(r => `<tr><td>${Doc.tgl(r.mulai)}</td><td>${esc(r.nama)}</td><td>${esc(r.nip)}</td><td style="white-space:nowrap"><button data-kp-ed="${r.id}">Ubah</button> <button data-kp-del="${r.id}" class="danger">×</button></td></tr>`).join('') || '<tr><td colspan="4" class="hint">Belum ada Kepala.</td></tr>'}</tbody></table></div>`;
+  $('#pk-baru').onclick = () => editPk(null);
+  if ($('#kp-baru')) $('#kp-baru').onclick = () => editKepala(null);
+  $$('[data-pk-ed]', box).forEach(b => b.onclick = () => editPk(pkOf(b.dataset.pkEd)));
+  $$('[data-pk-up]', box).forEach(b => b.onclick = () => editRiwayat(null, pkOf(b.dataset.pkUp)));
+  $$('[data-rw-ed]', box).forEach(b => b.onclick = () => { const r = data.riwayat.find(x => x.id === b.dataset.rwEd); editRiwayat(r, pkOf(r.pk_id)); });
+  $$('[data-rw-del]', box).forEach(b => b.onclick = guard(async () => { if (confirm('Hapus perubahan ini?')) { await hapus('PKRiwayat', b.dataset.rwDel); renderPejabat(); } }));
+  $$('[data-kp-ed]', box).forEach(b => b.onclick = () => editKepala(data.kepala.find(x => x.id === b.dataset.kpEd)));
+  $$('[data-kp-del]', box).forEach(b => b.onclick = guard(async () => { if (confirm('Hapus periode Kepala ini?')) { await hapus('Kepala', b.dataset.kpDel); renderPejabat(); } }));
+}
+
+// bagian form pangkat/jenjang (dipakai PK baru dan perubahan)
+function riwayatFields(r) {
+  r = r || {};
+  return `<label>Tipe<select name="tipe">${Object.entries(TIPE_LABEL).map(([v, l]) => `<option value="${v}" ${r.tipe === v ? 'selected' : ''}>${v} · ${l}</option>`).join('')}</select></label>
+    <label>Jenjang<select name="jenjang"></select></label>
+    <label>Gol/ruang<select name="golongan" required><option value="">— pilih —</option>${Object.keys(PANGKAT).map(g => `<option ${r.golongan === g ? 'selected' : ''}>${g}</option>`).join('')}</select></label>
+    <label>Pangkat (otomatis)<input name="pangkat" readonly></label>`;
+}
+function wireRiwayat(f, r) {
+  const fill = () => {
+    const t = f.elements.tipe.value, cur = f.elements.jenjang.value || (r && r.jenjang) || '';
+    f.elements.jenjang.innerHTML = JENJANG[t].map(j => `<option ${j === cur ? 'selected' : ''}>${j}</option>`).join('');
+    f.elements.pangkat.value = PANGKAT[f.elements.golongan.value] || '';
+  };
+  f.elements.tipe.onchange = () => { f.elements.jenjang.innerHTML = ''; fill(); };
+  f.elements.golongan.onchange = fill; fill();
+}
+
+function editPk(p) {
+  p = p || {};
+  const f = dialog(`<h2>${p.id ? 'Ubah PK' : 'PK baru'}</h2><div class="grid">
+    <div class="w2">${field('nama', 'Nama lengkap + gelar', p.nama, 'required')}</div>
+    ${field('nama_singkat', 'Nama singkat (untuk laporan)', p.nama_singkat, 'required')}
+    ${field('nip', 'NIP', p.nip, 'required inputmode="numeric"')}
+    ${field('alias', 'Nama di sheet jadwal (mis. Tuffa)', p.alias)}
+    ${p.id ? '' : `<div class="w2"><h3>Data awal (wajib lengkap)</h3></div>${field('mulai', 'Berlaku sejak', '', 'type="date" required')}<span></span>${riwayatFields()}`}</div>`,
+  async o => {
+    const id = p.id || uid();
+    await upsert('PK', { id, nama: o.nama, nama_singkat: o.nama_singkat, nip: o.nip, alias: o.alias });
+    if (!p.id) await upsert('PKRiwayat', { id: uid(), pk_id: id, mulai: o.mulai, golongan: o.golongan, tipe: o.tipe, jenjang: o.jenjang });
+    renderPejabat();
+  });
+  if (!p.id) wireRiwayat(f);
+}
+function editRiwayat(r, p) {
+  r = r || {};
+  const prev = riwayatPk(p.id).filter(x => x.id !== r.id).pop();
+  const f = dialog(`<h2>${r.id ? 'Ubah' : 'Perubahan pangkat/jenjang'} · ${esc(p.nama_singkat || p.nama)}</h2><div class="grid">
+    ${field('mulai', 'Berlaku sejak (tanggal batas)', r.mulai, 'type="date" required')}<span></span>${riwayatFields(r.id ? r : prev)}</div>
+    <p class="hint">Dokumen bertanggal sebelum tanggal ini tetap memakai data sebelumnya.</p>`,
+  async o => {
+    const first = riwayatPk(p.id)[0];
+    if (first && first.id !== r.id && o.mulai <= first.mulai) { toast('Tanggal harus setelah data awal (' + Doc.tgl(first.mulai) + ').', 5000); return false; }
+    await upsert('PKRiwayat', { id: r.id || uid(), pk_id: p.id, mulai: o.mulai, golongan: o.golongan, tipe: o.tipe, jenjang: o.jenjang }); renderPejabat();
+  });
+  wireRiwayat(f, r.id ? r : prev);
+}
+function editKepala(r) {
+  r = r || {};
+  dialog(`<h2>${r.id ? 'Ubah' : 'Periode'} Kepala Bapas</h2><div class="grid"><div class="w2">${field('nama', 'Nama lengkap + gelar', r.nama, 'required')}</div>
+    ${field('nip', 'NIP', r.nip, 'required')}${field('mulai', 'Berlaku sejak', r.mulai, 'type="date" required')}</div>`,
+  async o => {
+    if (data.kepala.some(x => x.id !== r.id && x.mulai === o.mulai)) { toast('Tanggal mulai sama dengan periode lain.', 5000); return false; }
+    await upsert('Kepala', { id: r.id || uid(), ...o }); renderPejabat();
+  });
 }
 
 // ============================================================ KALENDER
@@ -281,7 +458,7 @@ function renderKalender() {
   box.innerHTML = q.map(d => {
     const k = klienOf(d.klien_id) || { nama: '?' };
     return `<div class="item chip ${d.id === ui.sel ? 'on' : ''}" draggable="true" data-id="${d.id}"><b>${esc(k.nama)}</b>
-      <small><span class="tag ${kind(d.status_klien) === 'PUTUSAN' ? 'b' : ''}">${esc(d.status_klien)}</span>${KEG_LABEL[kind(d.status_klien)]} · terbit ${Doc.tgl(d.tgl_dokumen)}</small></div>`;
+      <small><span class="tag ${kind(d) === 'PUTUSAN' ? 'b' : ''}">${esc(stCode(d))}</span>${KEG_LABEL[kind(d)]} · terbit ${Doc.tgl(d.tgl_dokumen)}</small></div>`;
   }).join('') || '<p class="hint">Semua dokumen sudah dijadwalkan. Tambah dokumen di tab Klien &amp; Dokumen.</p>';
   $$('.chip', box).forEach(c => {
     c.onclick = () => { ui.sel = ui.sel === c.dataset.id ? null : c.dataset.id; renderKalender(); };
@@ -332,9 +509,9 @@ const schedule = guard(async (dokId, date) => {
 
 function openKegiatan(g) {
   if (!g) return;
-  const d = dokOf(g.dokumen_id), k = klienOf(d.klien_id), j = kind(d.status_klien);
+  const d = dokOf(g.dokumen_id), k = klienOf(d.klien_id), j = kind(d);
   dialog(`<h2>${esc(k.nama)}</h2><p class="hint">${KEG_LABEL[j]} · ${esc(dokLabel(d))}</p><div class="grid">
-    ${field('tgl_pel', 'Tanggal pelaksanaan', g.tgl_pel, `type="date" min="${addDays(d.tgl_dokumen, 1)}"`)}
+    ${field('tgl_pel', 'Tanggal pelaksanaan', g.tgl_pel, `type="date" min="${[addDays(d.tgl_dokumen, 1), (stOf(d) || {}).tgl_alih || ''].sort().pop()}"`)}
     ${field('tgl_sprint', 'Tanggal sprint', g.tgl_sprint, `type="date" min="${d.tgl_dokumen}"`)}
     ${field('staf', 'Petugas pendamping (kosong = default)', g.staf)}
     <div class="w2"><label>Isi hasil laporan (satu baris = satu poin; kosong = otomatis)<textarea name="hasil" rows="5">${esc(g.hasil)}</textarea></label></div></div>
@@ -362,7 +539,7 @@ function renderUnduh() {
   box.innerHTML = list.map(g => {
     const it = itemFor(g);
     return `<div class="krow" data-id="${g.id}"><input type="checkbox" class="pc" checked>
-      <div><b>${esc(it.k.nama)}</b><br><span class="tag ${it.keg.jenis === 'PUTUSAN' ? 'b' : ''}">${esc(it.d.status_klien)}</span>${KEG_LABEL[it.keg.jenis]}<br><small class="hint">${Doc.hari(g.tgl_pel)}, ${Doc.tgl(g.tgl_pel)} · sprint ${Doc.tgl(g.tgl_sprint)}</small></div>
+      <div><b>${esc(it.k.nama)}</b><br><span class="tag ${it.keg.jenis === 'PUTUSAN' ? 'b' : ''}">${esc(it.stCode(d))}</span>${KEG_LABEL[it.keg.jenis]}<br><small class="hint">${Doc.hari(g.tgl_pel)}, ${Doc.tgl(g.tgl_pel)} · sprint ${Doc.tgl(g.tgl_sprint)}</small></div>
       <div><div class="drop">Seret foto ke sini atau <u>klik untuk memilih</u><input type="file" accept="image/*" multiple hidden></div><div class="thumbs"></div></div></div>`;
   }).join('') || '<p class="hint">Belum ada kegiatan terjadwal. Jadwalkan di tab Kalender.</p>';
   $$('.krow', box).forEach(row => {
@@ -378,7 +555,7 @@ function renderUnduh() {
       });
     };
     const add = files => {
-      const l = photos.get(id) || [], j = kind(dokOf(g.dokumen_id).status_klien);
+      const l = photos.get(id) || [], j = kind(dokOf(g.dokumen_id));
       [...files].filter(f => f.type.startsWith('image/')).forEach(f => l.push({ file: f, url: URL.createObjectURL(f), caption: JENIS_FOTO[j] }));
       photos.set(id, l); draw();
     };
@@ -404,48 +581,72 @@ function chosen() {
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
 const safe = s => s.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, ' ').slice(0, 40);
 function busy(btn, fn) { btn.onclick = guard(async () => { const it = chosen(); if (!it.length) return; btn.disabled = true; try { await fn(it); } finally { btn.disabled = false; } }); }
-const warnSet = () => { if (!data.settings.pk_nama_gelar) toast('Lengkapi data PK/PPK di Pengaturan (⚙) agar tanda tangan terisi.', 5000); };
+function pkCheck(it, date) {
+  const miss = it.filter(x => !pkOf(x.pk_id) || !riwayatAt(x.pk_id, date(x)));
+  if (miss.length) { toast('Data PK belum lengkap untuk: ' + [...new Set(miss.map(x => x.k.nama))].join(', ') + '. Isi di tab "PK & Kepala".', 6000); return false; }
+  if (!kepalaAt(date(it[0]))) { toast('Isi data Kepala Bapas di tab "PK & Kepala".', 6000); return false; }
+  return true;
+}
+const spDate = x => x.keg.tgl_sp || x.keg.tgl_pel;
 
 busy($('#p-sp'), async it => {
-  warnSet(); const s = data.settings;
-  if (it.length === 1) return download(await Doc.sp(it[0].keg, it[0].k, s), `SP ${safe(it[0].k.nama)}.docx`);
+  if (!pkCheck(it, spDate)) return;
+  const one = x => Doc.sp(x.keg, x.k, sFor(x.pk_id, spDate(x)));
+  if (it.length === 1) return download(await one(it[0]), `SP ${safe(it[0].k.nama)}.docx`);
   const zip = new JSZip();
-  for (const x of it) zip.file(`SP ${x.keg.tgl_pel} ${safe(x.k.nama)}.docx`, await Doc.sp(x.keg, x.k, s));
+  for (const x of it) zip.file(`SP ${x.keg.tgl_pel} ${safe(x.k.nama)}.docx`, await one(x));
   download(await zip.generateAsync({ type: 'blob' }), 'SP Pendampingan.zip');
 });
-busy($('#p-bon'), async it => { warnSet(); download(await Doc.bon(it, data.settings, $('#p-tglbon').value || todayIso()), 'Bon Pendampingan Dewasa.docx'); });
-busy($('#p-lap'), async it => { warnSet(); download(await Doc.laporan(it, data.settings), 'Laporan Pendampingan Dewasa.docx'); });
+busy($('#p-bon'), async it => {
+  const tglBon = $('#p-tglbon').value || todayIso();
+  if (new Set(it.map(x => x.pk_id)).size > 1) return toast('BON hanya untuk satu PK. Centang kegiatan milik satu PK saja.', 6000);
+  if (!pkCheck(it, () => tglBon)) return;
+  download(await Doc.bon(it, sFor(it[0].pk_id, tglBon), tglBon), 'Bon Pendampingan Dewasa.docx');
+});
+busy($('#p-lap'), async it => {
+  if (!pkCheck(it, x => x.keg.tgl_pel)) return;
+  download(await Doc.laporan(it.map(x => ({ ...x, s: sFor(x.pk_id, x.keg.tgl_pel) })), data.settings), 'Laporan Pendampingan Dewasa.docx');
+});
 
 // ============================================================ PENGATURAN
 $('#b-set').onclick = () => {
   const c = conn(), s = data.settings;
-  dialog(`<h2>Pengaturan</h2>
-    <h3>Penyimpanan</h3><p class="hint">Kosong = data hanya di browser ini. Isi untuk memakai Google Sheets Anda (lihat README).</p>
-    <div class="grid"><div class="w2">${field('url', 'URL Web App Apps Script', c.url)}</div>${field('key', 'Kata sandi (APP_KEY)', c.key, 'type="password"')}</div>
-    <h3>Pejabat &amp; aturan</h3><div class="grid">${SETTING_FIELDS.map(([k, l]) => field('s_' + k, l, s[k])).join('')}</div>
+  const f = dialog(`<h2>Pengaturan</h2>
+    <h3>Penyimpanan: Google Sheets ${remote() && !banner.err ? '✓ tersambung' : '(belum tersambung)'}</h3>
+    <p class="hint">Data utama tersimpan di Google Sheet Anda; browser hanya menyimpan salinan cadangan. Data yang sudah terlanjur diketik di browser ini otomatis dikirim saat tersambung.</p>
+    <div class="grid"><div class="w2">${field('url', 'URL Web App Apps Script (…/exec)', c.url)}</div>${field('key', 'Kata sandi (APP_KEY)', c.key)}
+    <div style="align-self:end"><button type="button" id="s-kode">Buat kode skrip</button></div></div>
+    <div id="s-kodebox" hidden><p class="hint"><b>Langkah:</b> (1) buat Google Sheet baru → Extensions → Apps Script, hapus isinya, tempel kode di bawah, Save. (2) Deploy → New deployment → Web app: Execute as <i>Me</i>, access <i>Anyone</i> → Deploy → izinkan akses. (3) Salin URL <code>/exec</code> ke kolom di atas, lalu Simpan.</p>
+    <textarea class="code" id="s-kode-t" readonly></textarea><button type="button" id="s-salin">Salin kode</button></div>
+    <h3>Aturan umum</h3><div class="grid">${SETTING_FIELDS.map(([k, l]) => field('s_' + k, l, s[k])).join('')}</div>
     <label>Libur nasional &amp; cuti bersama (<code>YYYY-MM-DD nama</code> per baris)<textarea name="libur" rows="6">${esc(s.libur)}</textarea></label>
-    <div class="row" style="margin-top:10px"><button type="button" id="s-exp">Ekspor JSON</button><label class="inline"><button type="button" id="s-impb">Impor JSON</button><input type="file" id="s-imp" accept=".json" hidden></label></div>`,
+    <p class="hint">PK, pangkat/jenjang, dan Kepala diatur di tab "PK &amp; Kepala".</p>
+    <div class="row" style="margin-top:10px"><button type="button" id="s-exp">Ekspor JSON (cadangan)</button><label class="inline"><button type="button" id="s-impb">Impor JSON</button><input type="file" id="s-imp" accept=".json" hidden></label></div>`,
   async o => {
     SETTING_FIELDS.forEach(([k]) => data.settings[k] = k === 'uang' ? Number(o['s_' + k]) || 0 : o['s_' + k]);
-    data.settings.libur = o.libur; buildLibur();
-    const was = remote(); localStorage.setItem('bon_conn', JSON.stringify({ url: o.url, key: o.key }));
-    if (o.url && !was && (data.klien.length || data.dokumen.length) && confirm('Kirim data lokal ke Google Sheets Anda?')) {
-      for (const k of data.klien) await api({ action: 'upsert', sheet: 'Klien', row: k });
-      for (const d of data.dokumen) await api({ action: 'upsert', sheet: 'Dokumen', row: d });
-      for (const g of data.kegiatan) await api({ action: 'upsert', sheet: 'Kegiatan', row: g });
-    }
-    await saveSettings(); await load(); await loadExt(true); showTab(ui.tab); toast('Pengaturan tersimpan.');
+    data.settings.libur = o.libur;
+    localStorage.setItem('bon_conn', JSON.stringify({ url: o.url, key: o.key }));
+    saveLocal();
+    await load();
+    if (banner.err) { toast('Gagal tersambung: ' + banner.err, 7000); return false; }
+    await saveSettings(); await loadExt(true); showTab(ui.tab); toast(remote() ? 'Tersambung dan tersimpan di Google Sheets.' : 'Pengaturan tersimpan (belum tersambung ke Sheets).', 5000);
   });
+  $('#s-kode').onclick = guard(async () => {
+    const key = f.elements.key.value || (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : uid() + uid()); f.elements.key.value = key;
+    const src = await (await fetch('apps-script/Code.gs?v=' + Date.now())).text();
+    $('#s-kode-t').value = src.replace("const APP_KEY = 'GANTI_DENGAN_KATA_SANDI'", `const APP_KEY = '${key}'`); $('#s-kodebox').hidden = false;
+  });
+  $('#s-salin').onclick = () => { $('#s-kode-t').select(); navigator.clipboard && navigator.clipboard.writeText($('#s-kode-t').value); toast('Kode disalin.'); };
   $('#s-exp').onclick = () => download(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }), 'bon-data.json');
   $('#s-impb').onclick = () => $('#s-imp').click();
   $('#s-imp').onchange = guard(async e => {
-    const f = e.target.files[0]; if (!f) return; const d = JSON.parse(await f.text());
-    for (const k of d.klien || []) await upsert('Klien', k);
-    for (const x of d.dokumen || []) await upsert('Dokumen', x);
-    for (const g of d.kegiatan || []) await upsert('Kegiatan', g);
+    const f2 = e.target.files[0]; if (!f2) return; const d = JSON.parse(await f2.text());
+    for (const sh of Object.keys(SHEETS)) for (const r of d[SHEETS[sh]] || []) await upsert(sh, r);
     toast('Data diimpor.'); $('#dlg').close(); showTab(ui.tab);
   });
 };
-
 // ============================================================ mulai
 guard(async () => { await load(); showTab('klien'); loadExt(false).then(() => { if (ui.tab === 'kalender') renderKalender(); }).catch(() => {}); })();
+
+
+

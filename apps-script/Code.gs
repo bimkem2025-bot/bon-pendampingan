@@ -1,29 +1,41 @@
 /**
  * Backend Google Sheets untuk aplikasi Bon Pendampingan.
- * Pasang: buka Sheet Anda > Extensions > Apps Script > tempel file ini.
- * Project Settings > Script properties > tambah APP_KEY = (kata sandi rahasia Anda).
- * Deploy > New deployment > Web app: Execute as "Me", Access "Anyone". Salin URL /exec.
+ * 1) Buka Google Sheet kosong > Extensions > Apps Script > hapus isi bawaan, tempel file ini.
+ * 2) Ganti APP_KEY di bawah dengan kata sandi rahasia Anda (aplikasi web menyediakan kode yang sudah terisi).
+ * 3) Deploy > New deployment > Web app: Execute as "Me", Who has access "Anyone" > Deploy > salin URL /exec.
  * Data hanya terbaca bila request membawa APP_KEY yang benar.
  */
+const APP_KEY = 'GANTI_DENGAN_KATA_SANDI';
+
 const COLS = {
   Klien: ['id', 'nama', 'jk', 'tempat_lahir', 'tgl_lahir', 'agama', 'suku', 'pendidikan', 'pekerjaan', 'kawin', 'alamat'],
-  Dokumen: ['id', 'klien_id', 'jenis', 'nomor', 'tgl_dokumen', 'status_klien', 'perkara', 'tempat', 'pidana'],
+  Status: ['id', 'klien_id', 'status', 'tgl_alih', 'layanan', 'pk_id'],
+  Dokumen: ['id', 'klien_id', 'status_id', 'jenis', 'nomor', 'tgl_dokumen', 'perkara', 'tempat', 'pidana'],
   Kegiatan: ['id', 'dokumen_id', 'tgl_sprint', 'tgl_pel', 'staf', 'hasil'],
+  PK: ['id', 'nama', 'nama_singkat', 'nip', 'alias'],
+  PKRiwayat: ['id', 'pk_id', 'mulai', 'golongan', 'tipe', 'jenjang'],
+  Kepala: ['id', 'nama', 'nip', 'mulai'],
   Pengaturan: ['key', 'value'],
 };
+const OUT = { Klien: 'klien', Status: 'status', Dokumen: 'dokumen', Kegiatan: 'kegiatan', PK: 'pk', PKRiwayat: 'riwayat', Kepala: 'kepala' };
 
 function doGet(e) { return handle_(e.parameter || {}); }
 function doPost(e) { return handle_(JSON.parse(e.postData.contents)); }
 
 function handle_(req) {
-  const key = PropertiesService.getScriptProperties().getProperty('APP_KEY');
+  const key = APP_KEY !== 'GANTI_DENGAN_KATA_SANDI' ? APP_KEY : PropertiesService.getScriptProperties().getProperty('APP_KEY');
   if (!key || req.key !== key) return json_({ ok: false, error: 'unauthorized' });
   const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
+  lock.waitLock(25000);
   try {
     switch (req.action) {
-      case 'all': return json_({ ok: true, klien: rows_('Klien'), dokumen: rows_('Dokumen'), kegiatan: rows_('Kegiatan'), settings: settings_() });
+      case 'all': {
+        const o = { ok: true, settings: settings_() };
+        Object.keys(OUT).forEach(n => o[OUT[n]] = rows_(n));
+        return json_(o);
+      }
       case 'upsert': upsert_(req.sheet, req.row); return json_({ ok: true });
+      case 'bulk': (req.rows || []).forEach(r => upsert_(req.sheet, r)); return json_({ ok: true, n: (req.rows || []).length });
       case 'remove': remove_(req.sheet, req.id); return json_({ ok: true });
       case 'settings': upsert_('Pengaturan', { key: 'settings', value: JSON.stringify(req.settings) }); return json_({ ok: true });
       default: return json_({ ok: false, error: 'aksi tidak dikenal' });
@@ -38,13 +50,13 @@ function handle_(req) {
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
 function sheet_(name) {
-  if (!COLS[name]) throw new Error('sheet tidak valid');
+  if (!COLS[name]) throw new Error('sheet tidak valid: ' + name);
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
     sh.getRange(1, 1, 1, COLS[name].length).setValues([COLS[name]]).setFontWeight('bold');
-    sh.getRange(1, 1, sh.getMaxRows(), COLS[name].length).setNumberFormat('@'); // teks, supaya tanggal tidak berubah jadi Date
+    sh.getRange(1, 1, sh.getMaxRows(), COLS[name].length).setNumberFormat('@'); // teks: tanggal tidak berubah jadi Date
     sh.setFrozenRows(1);
   }
   return sh;

@@ -176,6 +176,8 @@ def build_bon():
             retag(p, '{pk_nama_gelar}')
         elif t.startswith('NIP. 199805'):
             retag(p, 'NIP. {pk_nip}')
+        elif t == 'Pembimbing Kemasyarakatan':
+            retag(p, '{pk_label}')
         elif t.startswith('Sintang,'):
             retag(p, 'Sintang, {tgl_bon}')
     put(files, root)
@@ -216,6 +218,8 @@ def tag_section(els):
                         retag(p, 'Sintang, {tgl_laporan}')
                     elif t.startswith('Tuffahati'):
                         retag(p, '{pk_nama_gelar}')
+                    elif t == 'Pembimbing Kemasyarakatan':
+                        retag(p, '{pk_label}')
             continue
         t = ptext(el).strip()
         if t.startswith('IV.'):
@@ -229,6 +233,8 @@ def tag_section(els):
         lab = t.split('\t')[0].split(':')[0].strip()
         if lab in FREE:
             set_value(el, FREE[lab])
+            if lab == 'Pembimbing Kemasyarakatan':
+                retag(el, ptext(el).replace('Pembimbing Kemasyarakatan', '{pk_label}', 1))
         elif lab.startswith('Staf Subsi'):
             set_value(el, '{staf}')
 
@@ -329,3 +335,4 @@ if __name__ == '__main__':
     build_bon()
     build_laporan()
     print('OK ->', os.path.abspath(OUT))
+

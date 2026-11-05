@@ -65,7 +65,7 @@ const Doc = (() => {
     x = x.replace(m[0], rows);
     x = fill(stripComments(x), {
       total: rupiah(s.uang * items.length), ppk_nama: s.ppk_nama, ppk_nip: s.ppk_nip,
-      tgl_bon: tgl(tglBon), pk_nama_gelar: s.pk_nama_gelar, pk_nip: s.pk_nip,
+      tgl_bon: tgl(tglBon), pk_nama_gelar: s.pk_nama_gelar, pk_nip: s.pk_nip, pk_label: s.pk_label || 'Pembimbing Kemasyarakatan',
     });
     zip.file('word/document.xml', x);
     return out(zip);
@@ -116,7 +116,7 @@ const Doc = (() => {
   }
 
   // items: [{keg, k, photos:[{file, caption}]}]
-  async function laporan(items, s) {
+  async function laporan(items, s0) {
     const zip = await open('laporan.docx');
     let x = await zip.file('word/document.xml').async('string');
     const fotoRow = await (await fetch('templates/laporan_fotorow.xml?v=' + Date.now())).text();
@@ -131,7 +131,8 @@ const Doc = (() => {
     let n = 0;
 
     const parts = [];
-    for (const { keg, k, photos } of items) {
+    for (const { keg, k, photos, s: si } of items) {
+      const s = si || s0;
       let sec = secs[keg.jenis === 'PUTUSAN' ? 'PUTUSAN' : 'HAK'];
       // bullet hasil
       const lines = (keg.hasil && keg.hasil.trim() ? keg.hasil.split('\n').map(l => l.trim()).filter(Boolean) : defaultHasil(keg));
@@ -152,7 +153,7 @@ const Doc = (() => {
       const ti = sec.lastIndexOf('</w:tbl>');
       if (rowsXml && ti >= 0) sec = sec.slice(0, ti) + rowsXml + sec.slice(ti);
       sec = fill(sec, {
-        tgl_pelaksanaan: tgl(keg.tgl_pel), tgl_laporan: tgl(keg.tgl_pel), pk_nama_gelar: s.pk_nama_gelar, pk_nama: s.pk_nama,
+        tgl_pelaksanaan: tgl(keg.tgl_pel), tgl_laporan: tgl(keg.tgl_pel), pk_nama_gelar: s.pk_nama_gelar, pk_nama: s.pk_nama, pk_label: s.pk_label || 'Pembimbing Kemasyarakatan',
         nama: k.nama, jk: k.jk, ttl_lap: ttlLap(k, keg.tgl_pel), agama: k.agama, suku: k.suku,
         pendidikan: k.pendidikan, pekerjaan: k.pekerjaan, kawin: k.kawin, perkara: k.perkara,
         status_klien: keg.status_klien, alamat: k.alamat, putusan: keg.putusan || '',
@@ -169,5 +170,6 @@ const Doc = (() => {
 
   return { tgl, hari, parse, pad, BULAN, HARI, sp, bon, laporan, defaultHasil, rupiah };
 })();
+
 
 

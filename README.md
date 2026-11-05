@@ -4,28 +4,28 @@ Web app statis (GitHub Pages) untuk membuat **SP/Sprint**, **BON**, dan **Lapora
 Dokumen dibuat di browser; foto tidak pernah diunggah. Repo ini hanya berisi kode dan template kosong, **tanpa data klien**.
 
 ## Alur
-1. **Klien & Dokumen**: isi klien sekali (unik), lalu tambah dokumen sumber hukum per klien (SP Han, putusan PN/PT/MA, penetapan)
-   beserta tanggal dokumen dan status/no. register. Status `A*` = tahanan → *Pendampingan Pemenuhan Hak*; `B*` = narapidana → *Pelaksanaan Putusan*.
-   Satu klien boleh punya banyak dokumen (mis. putusan PN, lalu PT, lalu MA).
-2. **Kalender**: seret klien dari daftar "Perlu dijadwalkan" ke tanggal (atau klik klien lalu klik tanggal). Tombol *Saran tanggal* memilih hari idle terdekat.
-3. **Unduh**: centang kegiatan, seret foto ke kotak foto, unduh SP (zip), BON, dan Laporan.
+1. **Klien**: isi identitas klien sekali (unik).
+2. **PK & Kepala** (sekali di awal): PK (nama, NIP, gol/ruang -> pangkat otomatis, tipe PK/APK, jenjang) wajib lengkap. Bila ada kenaikan pangkat/jenjang,
+   tambahkan *perubahan* dengan tanggal berlakunya; Kepala maksimal 2 periode. SP/BON/Laporan memakai data yang berlaku pada tanggal dokumennya.
+3. **Status klien**: per klien tambah status (mis. AIII, BI), **tanggal alih status**, layanan (*Pemenuhan Hak Tahanan* atau *Pelaksanaan Putusan*), dan PK.
+   Tanggal pelaksanaan tidak boleh lebih awal dari tanggal alih status.
+4. **Dokumen hukum**: pilih dulu status yang mana, lalu isi SP Han/putusan/penetapan beserta tanggalnya.
+5. **Kalender**: seret klien ke tanggal (atau klik lalu klik tanggal); *Saran tanggal* memilih hari idle terdekat.
+6. **Unduh**: centang kegiatan, seret foto, unduh SP (zip), BON (satu PK), Laporan.
 
 ## Aturan tanggal
-- Tanggal dokumen < tanggal pelaksanaan (tidak boleh sama hari).
-- Tanggal dokumen ≤ tanggal sprint ≤ tanggal pelaksanaan (sprint default: hari kerja sebelum pelaksanaan, bisa diubah dengan klik kegiatan di kalender).
-- Pelaksanaan hanya di hari kerja non-libur, satu kegiatan per hari, dan hari yang belum dipilih PK lain.
-- Jadwal PK lain dibaca langsung dari Google Sheet "Kontrol Surat Tugas" (ID di Pengaturan; sheet harus bisa dilihat siapa pun dengan link).
-  Hari kerja yang tidak punya baris di sheet ditandai kuning (boleh dipilih setelah konfirmasi).
+- Tanggal dokumen < tanggal pelaksanaan; tanggal alih status ≤ tanggal pelaksanaan.
+- Tanggal dokumen ≤ tanggal sprint ≤ tanggal pelaksanaan.
+- Hari kerja non-libur, satu kegiatan per hari, dan hari yang belum dipilih PK lain (sheet "Kontrol Surat Tugas", ID di Pengaturan).
+  Hari kerja tanpa baris di sheet ditandai kuning (boleh dipilih setelah konfirmasi).
 
-## Menyimpan data
-Default: di browser ini (localStorage). Disarankan memakai Google Sheets Anda:
-1. Buat Google Sheet baru → **Extensions → Apps Script**, tempel `apps-script/Code.gs`.
-2. **Project Settings → Script properties** → tambah `APP_KEY` (kata sandi rahasia).
-3. **Deploy → New deployment → Web app**: *Execute as: Me*, *Access: Anyone*. Salin URL `/exec`.
-4. Di aplikasi: ⚙ Pengaturan → tempel URL dan kata sandi. Tab `Klien`, `Dokumen`, `Kegiatan` dibuat otomatis.
+## Menyimpan data (Google Sheets)
+Data utama ada di Google Sheet Anda; browser hanya menyimpan salinan cadangan. Pengaturan (⚙) → **Buat kode skrip** menyiapkan kode Apps Script lengkap dengan kata sandi:
+1. Google Sheet baru → **Extensions → Apps Script**, tempel kode, Save.
+2. **Deploy → New deployment → Web app**: *Execute as: Me*, *Access: Anyone*. Salin URL `/exec`.
+3. Tempel URL di Pengaturan → Simpan. Tab Klien, Status, Dokumen, Kegiatan, PK, PKRiwayat, Kepala dibuat otomatis, dan data yang sudah ada di browser ikut terkirim.
 
-Data hanya terbaca bila membawa `APP_KEY` yang benar. Ekspor/impor JSON tersedia di Pengaturan sebagai cadangan.
-
+Data hanya terbaca bila membawa kata sandi yang benar. Ekspor/impor JSON tersedia di Pengaturan.
 ## Template dokumen
 `templates/*.docx` dibuat dari dokumen asli: `python tools/build_templates.py <folder-dokumen-asli>` (butuh `lxml`).
 Skrip membuang data klien dan nama penulis, lalu memasang tag `{nama}` dst. Dokumen asli jangan di-commit (sudah di `.gitignore`).
@@ -33,3 +33,4 @@ Skrip membuang data klien dan nama penulis, lalu memasang tag `{nama}` dst. Doku
 
 ## Uji
 `node tools/test_docgen.js` menghasilkan contoh dokumen di `out/` (perlu `out/foto.jpg` sembarang JPEG).
+
