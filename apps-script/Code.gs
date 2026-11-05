@@ -8,7 +8,7 @@
 const APP_KEY = 'GANTI_DENGAN_KATA_SANDI';
 
 const COLS = {
-  Klien: ['id', 'nama', 'jk', 'tempat_lahir', 'tgl_lahir', 'agama', 'suku', 'pendidikan', 'pekerjaan', 'kawin', 'alamat'],
+  Klien: ['id', 'nama', 'jk', 'tempat_lahir', 'tgl_lahir', 'agama', 'suku', 'pendidikan', 'pekerjaan', 'kawin', 'alamat', 'perkara', 'pasal', 'asal_lembaga'],
   Status: ['id', 'klien_id', 'status', 'tgl_alih', 'layanan', 'pk_id'],
   Dokumen: ['id', 'klien_id', 'status_id', 'jenis', 'nomor', 'tgl_dokumen', 'perkara', 'tempat', 'pidana'],
   Kegiatan: ['id', 'dokumen_id', 'tgl_sprint', 'tgl_pel', 'staf', 'hasil'],
@@ -58,6 +58,10 @@ function sheet_(name) {
     sh.getRange(1, 1, 1, COLS[name].length).setValues([COLS[name]]).setFontWeight('bold');
     sh.getRange(1, 1, sh.getMaxRows(), COLS[name].length).setNumberFormat('@'); // teks: tanggal tidak berubah jadi Date
     sh.setFrozenRows(1);
+  } else {
+    // kolom baru (mis. perkara/pasal/asal_lembaga) ditambahkan ke header sheet lama tanpa mengubah data
+    const have = sh.getRange(1, 1, 1, COLS[name].length).getValues()[0];
+    if (have.join('|') !== COLS[name].join('|')) sh.getRange(1, 1, 1, COLS[name].length).setValues([COLS[name]]).setFontWeight('bold');
   }
   return sh;
 }
@@ -99,4 +103,5 @@ function remove_(name, id) {
   const i = ids.indexOf(String(id));
   if (i >= 0) sh.deleteRow(i + 2);
 }
+
 
