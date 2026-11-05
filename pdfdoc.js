@@ -18,6 +18,13 @@ const PdfDoc = (() => {
 .doc .gt th,.doc .gt td{border:1px solid #000;padding:4px 5px;font-size:10.5pt}.doc .gt th{text-align:center;font-weight:700;vertical-align:middle}.doc .gt td.c{text-align:center}.doc .gt td.r{text-align:right}.doc .gt td.b{font-weight:700}
 .doc .ttd{margin-left:50%;text-align:center;margin-top:18px;page-break-inside:avoid}.doc .ttd .sp{height:21mm}
 .doc .ttd2{display:flex;align-items:center;margin-top:14px;page-break-inside:avoid}.doc .ttd2 .l{width:45%}.doc .ttd2 .g{width:10%}.doc .ttd2 .r2{width:45%;text-align:left}
+.doc .ttd2 .l{box-sizing:border-box;padding-left:22mm}
+.doc .hd{font-weight:700;margin:10px 0 2px}.doc .hd span{display:inline-block;width:9mm}.doc .in{margin-left:9mm}.doc .in .id td:nth-child(1){width:8mm;white-space:nowrap}.doc .in .id td:nth-child(4){padding-left:2mm}
+.doc .id td:nth-child(2){padding-right:3mm}.doc .id td:nth-child(3){width:4mm}.doc .kv.w td:nth-child(1){padding-right:2.5mm}
+.doc ul.bl{list-style:none;padding:0;margin:0 0 7px 9mm}.doc ul.bl li{padding-left:5mm;text-indent:-5mm}.doc ul.bl li:before{content:"\\2022";display:inline-block;width:5mm;text-indent:0}
+.doc .ttd.lf{text-align:left}
+.doc .sg td{padding-left:12mm}
+.doc .gt.nb th,.doc .gt.nb td{border:0}.doc .gt.nb th{font-weight:400}
 .doc .ttd2 img{display:block;height:41px;width:auto;margin:6px 0}
 .doc .gt{table-layout:fixed}.doc .gt td.r,.doc .gt td.nw{white-space:nowrap}
 .doc ul{margin:0 0 7px;padding-left:9mm}.doc ul li{text-align:justify}
@@ -30,7 +37,7 @@ const PdfDoc = (() => {
   // ---------------------------------------------------------------- SP
   function sp(keg, k, s) {
     const put = keg.jenis === 'PUTUSAN';
-    const kegiatan = put ? 'Pelaksanaan Putusan' : 'Pemenuhan Hak Tahanan/ Tersangka/ Terdakwa';
+    const kegiatan = put ? 'Pelaksanaan Putusan' : 'Pemenuhan Hak Tahanan/Tersangka/Terdakwa';
     const menimbang = [
       'bahwa berdasarkan tugas dan fungsi Balai Pemasyarakatan Kelas II Sintang terhadap klien anak adalah melaksanakan Bimbingan Kemasyarakatan;',
       'bahwa berdasarkan program kerja Balai Pemasyarakatan Kelas II Sintang tentang pendampingan pemeriksaan, penelitian kemasyarakatan dan pendampingan persidangan terhadap Anak yang Berkonflik dengan Hukum;',
@@ -56,9 +63,9 @@ const PdfDoc = (() => {
       <table class="ls"><tr><td>Kepada</td><td>:</td><td colspan="2" style="padding:0">${kv([['Nama', s.sp_pk_nama], ['NIP', s.sp_pk_nip], ['Pangkat', s.sp_pk_pangkat], ['Jabatan', s.sp_pk_jabatan]])}</td></tr></table>
       <div style="height:6px"></div>
       <table class="ls">
-        <tr><td><b>Untuk</b></td><td>:</td><td>1.</td><td><b>Melaksanakan Pendampingan ${kegiatan} di Lapas/ Rutan terhadap klien atas nama :</b>
+        <tr><td><b>Untuk</b></td><td>:</td><td>1.</td><td><b>Melaksanakan Pendampingan ${kegiatan} di Lapas/Rutan terhadap klien atas nama :</b>
           <div style="margin-top:3px">${kv([['Nama', k.nama, 1], ['Tempat, Tgl Lahir', `${k.tempat_lahir}, ${tgl(k.tgl_lahir)}`], ['Alamat', k.alamat], ['Perkara', k.perkara]])}</div></td></tr>
-        <tr><td></td><td></td><td>2.</td><td>Melaksanakan Pendampingan ${kegiatan} di Lapas/ Rutan Klien Dewasa.</td></tr>
+        <tr><td></td><td></td><td>2.</td><td>Melaksanakan Pendampingan ${kegiatan} di Lapas/Rutan Klien Dewasa.</td></tr>
         <tr><td></td><td></td><td>3.</td><td>Melaporkan hasil kegiatan kepada Kepala Balai Pemasyarakatan</td></tr>
       </table>
       <p style="margin-top:10px">Demikian Surat Perintah untuk dilaksanakan dan kepada semua pihak terkait dimohon bantuannya. Terima kasih.</p>
@@ -89,7 +96,7 @@ const PdfDoc = (() => {
       const rows = c.map(it => row(it, no++)).join('');
       const intro = first ? `<div class="r">Dewasa</div>
       <p class="b" style="margin:10px 0 12px;text-align:left">Yth. Pejabat Pembuat Komitmen<br>&emsp;&emsp;Bapas Kelas II Sintang<br>di - <br>&emsp;&emsp;Sintang</p>
-      <p>Dengan ini mengajukan biaya Pelaksanaan Kegiatan Pendampingan Tahanan Dewasa untuk program pendampingan pelaksanaan putusan dan pemenuhan hak tersangka untuk klien Dewasa atas nama :</p>` : `<p class="r" style="margin-bottom:6px">Lanjutan BON (halaman ${pi + 1} dari ${chunks.length})</p>`;
+      <p>Dengan ini mengajukan biaya Pelaksanaan Kegiatan Pendampingan Tahanan Dewasa untuk program pendampingan pelaksanaan putusan dan pemenuhan hak tersangka untuk klien Dewasa atas nama :</p>` : `<p class="r" style="margin-bottom:6px">Lanjutan (hal ${pi + 1} dari ${chunks.length})</p>`;
       return page(`${kop}${intro}<table class="gt">${cols}${head}${rows}${last ? jumlah : ''}</table>${last ? sign : ''}`);
     }).join('');
     return wrap(pages);
@@ -107,21 +114,21 @@ const PdfDoc = (() => {
       put ? ['Nomor Putusan/ Tanggal Putusan', keg.putusan] : ['Status Klien', keg.status_klien], ['Alamat/ Tempat Tinggal', k.alamat]];
     const kv = rows => `<table class="kv w">${rows.map(([a, b]) => `<tr><td>${a}</td><td>:</td><td>${esc(b)}</td></tr>`).join('')}</table>`;
     const foto = (photos || []).map(p => `<tr class="foto"><td style="width:62%"><img src="${p.url}" alt=""></td><td>${esc(p.caption)}</td></tr>`).join('');
-    const lamp = page(`<div class="r b">LAMPIRAN</div><h1>DOKUMENTASI</h1><h1 style="margin-bottom:10px">PENDAMPINGAN ${judul}</h1>
-      <table class="gt" style="font-size:10.5pt"><tr><th>Foto</th><th>Keterangan</th></tr>${foto || '<tr><td colspan="2" class="c">(belum ada foto)</td></tr>'}</table>`);
+    const lamp = page(`<div class="r">Lampiran</div><h1>DOKUMENTASI</h1><h1 style="margin-bottom:10px">PENDAMPINGAN ${judul}</h1>
+      <table class="gt nb" style="font-size:10.5pt"><tr><th>Foto</th><th>Keterangan</th></tr>${foto || '<tr><td colspan="2" class="c">(belum ada foto)</td></tr>'}</table>`);
     return wrap(page(`${kop}
       <h1>LAPORAN HASIL PENDAMPINGAN ${judul}</h1>
       <div style="margin:10px 0">${kv([['Status', put ? 'Pendampingan Pelaksanaan Putusan Klien Dewasa' : 'Pendampingan Pemenuhan Hak Klien Dewasa'], ['Waktu Pelaksanaan', tglL], ['Nama PK', s.pk_nama_gelar]])}</div>
-      <p class="b" style="margin:0 0 2px">I. IDENTITAS</p>
-      <table class="id">${idr.map(([a, b], i) => `<tr><td>${i + 1}.</td><td>${a}</td><td>:</td><td>${esc(b)}</td></tr>`).join('')}</table>
-      <p class="b" style="margin:10px 0 2px">II. WAKTU DAN TEMPAT</p>
-      <p style="margin:0 0 2px">&emsp;Telah dilakukan pelaksanaan Kegiatan ${put ? 'Pelaksanaan Putusan' : 'Pemenuhan Hak'} Klien Dewasa :</p>
-      <div style="padding-left:8mm">${kv([['Hari', Doc.hari(keg.tgl_pel)], ['Tanggal', tglL], ['Tempat', keg.tempat || s.tempat]])}</div>
-      <p class="b" style="margin:10px 0 2px">III. PIHAK YANG HADIR</p>
-      ${kv([[s.pk_label || 'Pembimbing Kemasyarakatan', s.pk_nama], [put ? 'Staf Subsi Registrasi' : 'Staf Subsi Perawatan Tahanan', staf], ['Klien', k.nama]])}
-      <p class="b" style="margin:10px 0 2px">IV. HASIL PENDAMPINGAN ${judul}</p>
-      <ul>${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>
-      <div class="ttd">Sintang, ${tglL}<br>${esc(s.pk_label || 'Pembimbing Kemasyarakatan')}<div class="sp"></div>${esc(s.pk_nama_gelar)}</div>`) + lamp);
+      <div class="hd"><span>I.</span>IDENTITAS</div>
+      <div class="in"><table class="id">${idr.map(([a, b], i) => `<tr><td>${i + 1}.</td><td>${a}</td><td>:</td><td>${esc(b)}</td></tr>`).join('')}</table></div>
+      <div class="hd"><span>II.</span>WAKTU DAN TEMPAT</div>
+      <div class="in"><p style="margin:0 0 2px">Telah dilakukan pelaksanaan Kegiatan ${put ? 'Pelaksanaan Putusan' : 'Pemenuhan Hak'} Klien Dewasa :</p>
+      ${kv([['Hari', Doc.hari(keg.tgl_pel)], ['Tanggal', tglL], ['Tempat', keg.tempat || s.tempat]])}</div>
+      <div class="hd"><span>III.</span>PIHAK YANG HADIR</div>
+      <div class="in">${kv([[s.pk_label || 'Pembimbing Kemasyarakatan', s.pk_nama], [put ? 'Staf Subsi Registrasi' : 'Staf Subsi Perawatan Tahanan', staf], ['Klien', k.nama]])}</div>
+      <div class="hd"><span>IV.</span>HASIL PENDAMPINGAN ${judul}</div>
+      <ul class="bl">${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>
+      <div class="ttd lf">Sintang, ${tglL}<br>${esc(s.pk_label || 'Pembimbing Kemasyarakatan')}<div class="sp"></div>${esc(s.pk_nama_gelar)}</div>`) + lamp);
   }
   const umur = (a, b) => { const x = Doc.parse(a), y = Doc.parse(b); let u = y.getFullYear() - x.getFullYear(); if (y.getMonth() < x.getMonth() || (y.getMonth() === x.getMonth() && y.getDate() < x.getDate())) u--; return u; };
 
@@ -144,6 +151,32 @@ const PdfDoc = (() => {
   }
 
   // surat bebas dari editor template: isi HTML (sudah terisi data) + kop opsional
-  function surat(body, withKop = true) { return wrap(page((withKop ? kop : '') + body)); }
-  return { sp, bon, laporan, toPdf, surat };
+  // Halaman dipotong otomatis per blok teratas sesuai tinggi isi (F4 - margin); "Halaman baru" (.pbk) memaksa halaman baru.
+  function surat(body, withKop = true, m = {}) {
+    const mg = { t: 9, r: 20, b: 12, l: 20, ...m }, PW = 215.9, PH = 330.2, px = 3.7795;
+    const cw = PW - mg.l - mg.r, avail = (PH - mg.t - mg.b) * px;
+    const kopH = withKop ? ((cw * 202 / 1236) + 7) * px : 0;
+    const host = document.createElement('div'); host.style.cssText = `position:fixed;left:-99999px;top:0;width:${cw}mm`;
+    host.innerHTML = `<div class="doc">${CSS}<div class="bd">${body}</div></div>`; document.body.append(host);
+    const pages = [[]]; let used = kopH;
+    try {
+      for (const el of [...host.querySelector('.bd').children]) {
+        if (el.classList.contains('pbk')) { pages.push([]); used = 0; continue; }
+        const cs = getComputedStyle(el), h = el.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
+        if (used + h > avail && pages[pages.length - 1].length) { pages.push([]); used = 0; }
+        pages[pages.length - 1].push(el.outerHTML); used += h;
+      }
+    } finally { host.remove(); }
+    const st = `padding:${mg.t}mm ${mg.r}mm ${mg.b}mm ${mg.l}mm`;
+    return wrap(pages.map((p, i) => `<div class="pg" style="${st}">${i === 0 && withKop ? kop : ''}${p.join('')}</div>`).join(''), 'sx');
+  }
+  async function toBlob(html) {
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-99999px;top:0;background:#fff';
+    host.innerHTML = html; document.body.append(host);
+    try {
+      await imgsReady(host);
+      return await html2pdf().set({ margin: 0, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true, logging: false, letterRendering: true }, jsPDF: { unit: 'mm', format: [215.9, 330.2], orientation: 'portrait' }, pagebreak: { mode: ['css'], avoid: ['tr'] } }).from(host.firstElementChild).outputPdf('blob');
+    } finally { host.remove(); }
+  }
+  return { sp, bon, laporan, toPdf, toBlob, surat };
 })();

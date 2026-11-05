@@ -272,7 +272,7 @@ function sFor(pkId, date) {
   ['kepala_nama', 'ppk_nama', 'pk_nama_gelar', 'pk_nama', 'sp_pk_nama'].forEach(k => { if (s[k]) s[k] = tanpaGelar(s[k]); });
   return s;
 }
-const perkaraOf = (k, d) => [k.perkara, k.pasal].filter(Boolean).join('/ ') || (d && d.perkara) || '';
+const perkaraOf = (k, d) => [k.perkara, k.pasal].filter(Boolean).join(' / ') || (d && d.perkara) || '';
 function itemFor(g) {
   const d = dokOf(g.dokumen_id), k = klienOf(d && d.klien_id); if (!d || !k) return null;
   const st = stOf(d) || {}, jenis = kind(d), putusanDoc = d.jenis.startsWith('PUTUSAN') || d.jenis === 'PENETAPAN';
@@ -645,7 +645,7 @@ function renderUnduh() {
     const it = itemFor(g);
     return `<div class="krow" data-id="${g.id}"><input type="checkbox" class="pc" checked>
       <div><b>${esc(it.k.nama)}</b><br><span class="tag ${it.keg.jenis === 'PUTUSAN' ? 'b' : ''}">${esc(stCode(it.d))}</span>${KEG_LABEL[it.keg.jenis]}<br><small class="hint">${Doc.hari(g.tgl_pel)}, ${Doc.tgl(g.tgl_pel)} · sprint ${Doc.tgl(g.tgl_sprint)}</small></div>
-      <div><div class="row" style="margin-bottom:8px"><button class="pri sm" data-do="sp">Pratinjau SP</button><button class="pri sm" data-do="lap">Pratinjau Laporan</button></div><div class="drop" tabindex="0">Klik di sini lalu <b>tempel foto (Ctrl+V)</b>, atau seret foto ke sini</div><div class="thumbs"></div></div></div>`;
+      <div><div class="row" style="margin-bottom:8px"><button class="pri sm" data-do="sp">Pratinjau SP</button><button class="pri sm" data-do="lap">Pratinjau Laporan</button><button class="sm" data-do="qr" title="Bubuhkan tanda tangan QR pada laporan (halaman mana pun), lalu gabung dengan Sprint dan Lampiran">TTD QR &amp; gabung</button></div><div class="drop" tabindex="0">Klik di sini lalu <b>tempel foto (Ctrl+V)</b>, atau seret foto ke sini</div><div class="thumbs"></div></div></div>`;
   }).join('') || '<p class="hint">Belum ada kegiatan terjadwal. Jadwalkan di tab Kalender.</p>';
   $$('.krow', box).forEach(row => {
     const id = row.dataset.id, g = data.kegiatan.find(x => x.id === id), drop = $('.drop', row), th = $('.thumbs', row);
@@ -670,7 +670,7 @@ function renderUnduh() {
     ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
     drop.addEventListener('drop', e => add(e.dataTransfer.files));
     draw();
-    $$('[data-do]', row).forEach(b => b.onclick = guard(async () => (b.dataset.do === 'sp' ? previewSp : previewLap)(itemById(id))));
+    $$('[data-do]', row).forEach(b => b.onclick = guard(async () => b.dataset.do === 'qr' ? berkasDialog(id) : (b.dataset.do === 'sp' ? previewSp : previewLap)(itemById(id))));
   });
   const last = list.length ? list[list.length - 1].tgl_pel : todayIso();
   if (!$('#p-tglbon').dataset.set) $('#p-tglbon').value = addDays(last, 1);
@@ -786,14 +786,14 @@ function berkasDialog(id) {
   let recs = {}, pages = 1;
   const s = sFor(x.pk_id, g.tgl_pel) || {};
   const lines = () => ['Ditandatangani elektronik oleh', s.pk_nama_gelar || s.pk_nama || 'PK', 'Bapas Kelas II Sintang', Doc.tgl(g.tgl_pel)];
-  const qrText = () => `Laporan Pendampingan ${data.settings.instansi || 'Bapas Kelas II Sintang'} | ${s.pk_nama_gelar || s.pk_nama || ''} | ${g.tgl_pel} | ${g.id}`;
+  const qrText = () => new URL('verifikasi.html', location.href).href.split('?')[0] + '?' + new URLSearchParams({ pk: s.pk_nama_gelar || s.pk_nama || '', tgl: g.tgl_pel, id: String(g.id).slice(-8) });
   const nm = r => r ? esc(r.name) : '<span class="hint">belum ada</span>';
   body.innerHTML = `<div id="bk-f" style="padding:20px"><h2>Berkas · ${esc(x.k.nama)}</h2><p class="hint">${Doc.hari(g.tgl_pel)}, ${Doc.tgl(g.tgl_pel)} · ${esc(KEG_LABEL[x.keg.jenis])}. Berkas disimpan hanya di browser ini, tidak dikirim ke server mana pun.</p>
     <h3 style="margin-top:14px">1. Sprint (dari aplikasi lain)</h3>
     <div class="row"><input id="bk-link" class="grow" placeholder="Tempel link hasil dokumen Sprint" value="${esc(g.link_sprint || '')}"><button type="button" id="bk-open" class="sm">Buka</button></div>
     <div class="row" style="margin-top:6px"><label class="inline">Berkas PDF/gambar Sprint untuk digabung <input type="file" id="bk-f-sprint" accept="application/pdf,image/*"></label><span id="bk-n-sprint" class="hint"></span></div>
-    <h3 style="margin-top:14px">2. Laporan (dari lokal)</h3>
-    <div class="row"><input type="file" id="bk-f-laporan" accept="application/pdf,image/*"><span id="bk-n-laporan" class="hint"></span></div>
+    <h3 style="margin-top:14px">2. Laporan (satu-satunya dokumen yang diberi TTD QR; BON tetap tanda tangan basah)</h3>
+    <div class="row"><button type="button" id="bk-gen" class="sm pri">Pakai Laporan dari aplikasi ini</button><span class="hint">atau unggah dari lokal:</span><input type="file" id="bk-f-laporan" accept="application/pdf,image/*"><span id="bk-n-laporan" class="hint"></span></div>
     <div id="bk-stamp" hidden><p class="hint">Klik pada halaman untuk menaruh cap tanda tangan QR. Geser ukuran lewat slider.</p>
       <div class="row"><label class="inline">Halaman <input type="number" id="bk-pg" min="1" value="1" style="width:70px"></label><label class="inline">Ukuran <input type="range" id="bk-w" min="15" max="60" value="36" style="width:140px"></label><label class="inline"><input type="checkbox" id="bk-on" checked> Pasang cap</label></div>
       <div style="position:relative;display:inline-block;margin-top:8px;border:1px solid var(--line2)"><canvas id="bk-cv" style="display:block;max-width:100%"></canvas><img id="bk-mk" style="position:absolute;pointer-events:none"></div></div>
@@ -823,6 +823,12 @@ function berkasDialog(id) {
     await draw();
   };
   ['sprint', 'laporan', 'lampiran'].forEach(k => $('#bk-f-' + k).onchange = guard(async e => { const f = e.target.files[0]; if (!f) return; await Berkas.put(id, k, f); e.target.value = ''; await refresh(); }));
+  $('#bk-gen').onclick = guard(async () => {
+    const it = itemById(id); if (!it || !pkCheck([it], y => y.keg.tgl_pel)) return;
+    const html = PdfDoc.laporan(it, sFor(it.pk_id, it.keg.tgl_pel));
+    const blob = await PdfDoc.toBlob(html); blob.name = `Laporan ${safe(it.k.nama)}.pdf`;
+    await Berkas.put(id, 'laporan', blob); await refresh(); toast('Laporan dibuat. Klik halaman untuk menaruh TTD QR.');
+  });
   $('#bk-link').onchange = guard(async e => { await upsert('Kegiatan', { ...g, link_sprint: e.target.value.trim() }); g.link_sprint = e.target.value.trim(); toast('Link Sprint tersimpan.'); });
   $('#bk-open').onclick = () => { const v = $('#bk-link').value.trim(); if (/^https?:\/\//i.test(v)) window.open(v, '_blank', 'noopener'); else toast('Isi link yang diawali https://'); };
   const save = () => localStorage.setItem(stKey, JSON.stringify(st));
@@ -857,7 +863,7 @@ function tplValues(gid) {
   const g = gid && data.kegiatan.find(x => x.id === gid), x = g && itemFor(g), t = Doc.tgl(todayIso());
   if (!x) return { nama: 'Nama Klien', jk: 'Laki-laki', tempat_lahir: 'Sintang', tgl_lahir: '17 Mei 1990', agama: 'Islam', pendidikan: 'SMA', pekerjaan: 'Wiraswasta', alamat: 'Jl. Contoh No. 1', perkara: 'Pasal 362 KUHP', status: 'AIII', layanan: 'Hak Tahanan', dokumen: 'Surat Penahanan Nomor : 1/2026', tgl_pelaksanaan: t, hari_pelaksanaan: 'Senin', tgl_sprint: t, tempat: 'Lapas Sintang', petugas: 'Petugas', pk_nama: 'Nama PK', pk_nip: '19900101 201501 1 001', pk_pangkat: 'Penata Muda / III/a', pk_jabatan: 'Pembimbing Kemasyarakatan', kepala_nama: 'Nama Kepala', kepala_nip: '', tgl_cetak: t };
   const s = sFor(x.pk_id, g.tgl_pel) || {}, kp = kepalaAt(g.tgl_pel) || {};
-  return { nama: x.k.nama, jk: x.k.jk, tempat_lahir: x.k.tempat_lahir, tgl_lahir: Doc.tgl(x.k.tgl_lahir), agama: x.k.agama, pendidikan: x.k.pendidikan, pekerjaan: x.k.pekerjaan, alamat: x.k.alamat, perkara: perkaraOf(x.k, x.d),
+  return { nama: x.k.nama, jk: x.k.jk, tempat_lahir: x.k.tempat_lahir, tgl_lahir: Doc.tgl(x.k.tgl_lahir), agama: x.k.agama, pendidikan: x.k.pendidikan, pekerjaan: x.k.pekerjaan, alamat: x.k.alamat, perkara: x.k.perkara,
     status: x.keg.status_klien, layanan: KEG_LABEL[x.keg.jenis], dokumen: x.keg.dasar, tgl_pelaksanaan: Doc.tgl(g.tgl_pel), hari_pelaksanaan: Doc.hari(g.tgl_pel), tgl_sprint: Doc.tgl(g.tgl_sprint), tempat: x.keg.tempat, petugas: g.staf || '',
     pk_nama: s.sp_pk_nama || s.pk_nama || '', pk_nip: s.sp_pk_nip || '', pk_pangkat: s.sp_pk_pangkat || '', pk_jabatan: s.sp_pk_jabatan || '', kepala_nama: tanpaGelar(kp.nama || ''), kepala_nip: kp.nip || '', tgl_cetak: t };
 }
@@ -866,41 +872,136 @@ function tplFill(html, vals) { return html.replace(/\$\{(\w+)\}/g, (m, k) => k i
 function renderTemplate() {
   const root = $('#tp'); if (root.dataset.ready) return; root.dataset.ready = 1;
   let list = tplLoad(), cur = list[0] ? list[0].id : null;
+  const FONTS = ['Times New Roman', 'Arial', 'Calibri', 'Cambria', 'Georgia', 'Verdana', 'Courier New'];
   const opts = `<option value="">Sisipkan placeholder…</option>` + TPL_VARS.map(([k, l]) => `<option value="${k}">${esc(l)}  \${${k}}</option>`).join('');
   const B = (cmd, lbl, title, arg) => `<button type="button" data-c="${cmd}" ${arg ? `data-a="${arg}"` : ''} title="${title}">${lbl}</button>`;
+  const T = (id, lbl, title) => `<button type="button" id="${id}" title="${title}">${lbl}</button>`;
   root.innerHTML = `<div class="row between"><h2>Template surat</h2><div class="row"><select id="tp-sel" style="width:auto"></select><button type="button" id="tp-new">Baru</button><button type="button" id="tp-del" class="danger">Hapus</button></div></div>
-    <p class="hint">Tulis surat dengan format lengkap, sisipkan placeholder data klien/PK/Kepala. Template tersimpan di browser ini; bisa diekspor/diimpor sebagai berkas.</p>
-    <div class="row" style="margin:8px 0"><input id="tp-nama" placeholder="Nama template" style="max-width:320px"><label class="inline"><input type="checkbox" id="tp-kop" checked> Pakai kop surat</label></div>
-    <div class="tb">${B('bold', '<b>B</b>', 'Tebal')}${B('italic', '<i>I</i>', 'Miring')}${B('underline', '<u>U</u>', 'Garis bawah')}<span class="sep"></span>
-      <select id="tp-blk"><option value="p">Paragraf</option><option value="h1">Judul</option><option value="h2">Subjudul</option></select>
-      <select id="tp-fs"><option value="">Ukuran</option><option value="2">Kecil</option><option value="3">Normal</option><option value="5">Besar</option><option value="6">Sangat besar</option></select><span class="sep"></span>
+    <p class="hint">Tampilan di bawah sama dengan hasil PDF (kertas F4). Halaman otomatis berpindah bila isi penuh. Placeholder <code>\${...}</code> diganti data saat pratinjau.</p>
+    <div class="row" style="margin:8px 0"><input id="tp-nama" placeholder="Nama template" style="max-width:300px"><label class="inline"><input type="checkbox" id="tp-kop" checked> Kop surat</label>
+      <span class="hint" style="margin:0 0 0 8px">Margin (mm):</span>
+      <label class="inline">atas <input type="number" id="tp-mt" min="0" max="80" style="width:62px"></label><label class="inline">bawah <input type="number" id="tp-mb" min="0" max="80" style="width:62px"></label><label class="inline">kiri <input type="number" id="tp-ml" min="0" max="80" style="width:62px"></label><label class="inline">kanan <input type="number" id="tp-mr" min="0" max="80" style="width:62px"></label></div>
+    <div class="tb">
+      <select id="tp-ff" title="Jenis huruf">${FONTS.map(f => `<option>${f}</option>`).join('')}</select>
+      ${T('tp-fm', '−', 'Kecilkan huruf')}<input id="tp-fs" type="number" min="6" max="72" value="11" style="width:58px" title="Ukuran huruf (pt)">${T('tp-fp', '+', 'Besarkan huruf')}<span class="sep"></span>
+      ${B('bold', '<b>B</b>', 'Tebal')}${B('italic', '<i>I</i>', 'Miring')}${B('underline', '<u>U</u>', 'Garis bawah')}${B('strikeThrough', '<s>S</s>', 'Coret')}
+      <input type="color" id="tp-col" value="#000000" title="Warna huruf" style="width:34px;padding:1px"><input type="color" id="tp-hl" value="#ffff00" title="Sorot" style="width:34px;padding:1px"><span class="sep"></span>
+      <select id="tp-blk" title="Gaya"><option value="p">Paragraf</option><option value="h1">Judul</option><option value="h2">Subjudul</option></select><span class="sep"></span>
       ${B('justifyLeft', '⇤', 'Rata kiri')}${B('justifyCenter', '↔', 'Tengah')}${B('justifyRight', '⇥', 'Rata kanan')}${B('justifyFull', '≡', 'Rata kiri-kanan')}<span class="sep"></span>
-      ${B('insertUnorderedList', '• Daftar', 'Daftar poin')}${B('insertOrderedList', '1. Daftar', 'Daftar nomor')}${B('indent', '→|', 'Geser kanan')}${B('outdent', '|←', 'Geser kiri')}<span class="sep"></span>
-      <button type="button" id="tp-tbl" title="Sisipkan tabel">▦ Tabel</button><button type="button" id="tp-br" title="Halaman baru">⏎ Hal. baru</button>${B('removeFormat', '✕ Format', 'Bersihkan format')}${B('undo', '↶', 'Urungkan')}${B('redo', '↷', 'Ulangi')}<span class="sep"></span>
+      <select id="tp-lh" title="Spasi baris"><option value="">Spasi baris</option><option>1</option><option>1.15</option><option>1.3</option><option>1.5</option><option>2</option></select>
+      <select id="tp-sb" title="Jarak sebelum paragraf"><option value="">Sebelum</option><option>0</option><option>3</option><option>6</option><option>12</option><option>18</option></select>
+      <select id="tp-sa" title="Jarak setelah paragraf"><option value="">Sesudah</option><option>0</option><option>3</option><option>6</option><option>12</option><option>18</option></select><span class="sep"></span>
+      ${B('insertUnorderedList', '• Daftar', 'Daftar poin')}${B('insertOrderedList', '1. Daftar', 'Daftar nomor')}${B('indent', '→|', 'Geser kanan')}${B('outdent', '|←', 'Geser kiri')}</div>
+    <div class="tb" style="border-radius:0">
+      ${T('tp-tbl', '▦ Tabel', 'Sisipkan tabel')}${T('tp-ra', '+ Baris', 'Tambah baris di bawah')}${T('tp-ca', '+ Kolom', 'Tambah kolom di kanan')}${T('tp-rd', '− Baris', 'Hapus baris')}${T('tp-cd', '− Kolom', 'Hapus kolom')}${T('tp-td', '✕ Tabel', 'Hapus tabel')}
+      <select id="tp-bd" title="Garis tabel"><option value="">Garis tabel</option><option value="1">Dengan garis</option><option value="0">Tanpa garis</option></select><span class="sep"></span>
+      <label class="inline" style="font-size:12px">Lebar gambar (mm) <input type="number" id="tp-iw" min="5" max="200" style="width:62px" disabled></label>${T('tp-img', '🖼 Gambar', 'Sisipkan gambar')}<input type="file" id="tp-imgf" accept="image/*" hidden><span class="sep"></span>
+      ${T('tp-br', '⏎ Hal. baru', 'Paksa halaman baru')}${B('removeFormat', '✕ Format', 'Bersihkan format')}${B('undo', '↶', 'Urungkan')}${B('redo', '↷', 'Ulangi')}<span class="sep"></span>
       <select id="tp-var">${opts}</select></div>
-    <div id="tp-ed" contenteditable="true"></div>
+    <div id="tp-wrap"><div id="tp-pg"><img id="tp-kopimg" src="assets/kop.png" alt=""><hr id="tp-kophr"><div id="tp-ed" contenteditable="true"></div></div></div>
+    <p class="hint">Tabel: tarik garis kolom/baris dengan mouse untuk mengubah ukuran. Klik gambar untuk mengatur lebarnya.</p>
     <div class="row" style="margin-top:12px"><select id="tp-kg" style="width:auto;max-width:340px"></select><span class="grow"></span><button type="button" id="tp-exp">Ekspor</button><label class="inline"><input type="file" id="tp-imp" accept="application/json" hidden><button type="button" onclick="this.previousElementSibling.click()">Impor</button></label><button type="button" id="tp-save">Simpan</button><button type="button" id="tp-pv" class="pri">Pratinjau &amp; PDF</button></div>`;
-  const ed = $('#tp-ed'), sel = $('#tp-sel');
+  const ed = $('#tp-ed'), sel = $('#tp-sel'), pg = $('#tp-pg');
+  try { document.execCommand('styleWithCSS', false, true); document.execCommand('defaultParagraphSeparator', false, 'p'); } catch { /* abaikan */ }
+  const marg = () => ({ t: +$('#tp-mt').value || 0, b: +$('#tp-mb').value || 0, l: +$('#tp-ml').value || 0, r: +$('#tp-mr').value || 0 });
+  const applyPage = () => { const m = marg(), k = $('#tp-kop').checked; pg.style.padding = `${m.t}mm ${m.r}mm ${m.b}mm ${m.l}mm`; $('#tp-kopimg').hidden = $('#tp-kophr').hidden = !k; };
+  ['mt', 'mb', 'ml', 'mr'].forEach(i => $('#tp-' + i).oninput = applyPage); $('#tp-kop').onchange = applyPage;
   const fillSel = () => { sel.innerHTML = list.map(t => `<option value="${t.id}">${esc(t.nama || 'Tanpa nama')}</option>`).join('') || '<option value="">(belum ada)</option>'; sel.value = cur || ''; };
-  const load = () => { const t = list.find(x => x.id === cur); ed.innerHTML = t ? t.html : TPL_DEFAULT; $('#tp-nama').value = t ? t.nama : 'Surat baru'; $('#tp-kop').checked = t ? t.kop !== false : true; };
-  const store = () => { let t = list.find(x => x.id === cur); if (!t) { t = { id: uid() }; list.push(t); cur = t.id; } t.nama = $('#tp-nama').value.trim() || 'Tanpa nama'; t.html = ed.innerHTML; t.kop = $('#tp-kop').checked; tplSave(list); fillSel(); };
+  const load = () => {
+    const t = list.find(x => x.id === cur), m = (t && t.m) || { t: 9, b: 12, l: 20, r: 20 };
+    ed.innerHTML = t ? t.html : TPL_DEFAULT; $('#tp-nama').value = t ? t.nama : 'Surat baru'; $('#tp-kop').checked = t ? t.kop !== false : true;
+    $('#tp-mt').value = m.t; $('#tp-mb').value = m.b; $('#tp-ml').value = m.l; $('#tp-mr').value = m.r; applyPage();
+  };
+  const store = () => { let t = list.find(x => x.id === cur); if (!t) { t = { id: uid() }; list.push(t); cur = t.id; } t.nama = $('#tp-nama').value.trim() || 'Tanpa nama'; t.html = ed.innerHTML; t.kop = $('#tp-kop').checked; t.m = marg(); tplSave(list); fillSel(); };
   $('#tp-kg').innerHTML = '<option value="">Data contoh</option>' + data.kegiatan.filter(g => g.tgl_pel && itemFor(g)).sort((a, b) => b.tgl_pel.localeCompare(a.tgl_pel)).map(g => `<option value="${g.id}">${esc(itemFor(g).k.nama)} · ${Doc.tgl(g.tgl_pel)}</option>`).join('');
   fillSel(); load();
-  $$('.tb [data-c]', root).forEach(b => { b.onmousedown = e => e.preventDefault(); b.onclick = () => { ed.focus(); document.execCommand(b.dataset.c, false, b.dataset.a || null); }; });
-  $('#tp-blk').onchange = e => { ed.focus(); document.execCommand('formatBlock', false, e.target.value); };
-  $('#tp-fs').onchange = e => { if (e.target.value) { ed.focus(); document.execCommand('fontSize', false, e.target.value); } e.target.value = ''; };
-  $('#tp-var').onchange = e => { if (e.target.value) { ed.focus(); document.execCommand('insertText', false, '${' + e.target.value + '}'); } e.target.value = ''; };
-  $('#tp-tbl').onmousedown = e => e.preventDefault();
-  $('#tp-tbl').onclick = () => { const r = +prompt('Jumlah baris', '3') || 0, c = +prompt('Jumlah kolom', '2') || 0; if (!r || !c) return; ed.focus(); document.execCommand('insertHTML', false, '<table>' + ('<tr>' + '<td style="border:1px solid #000;padding:3px 5px">&nbsp;</td>'.repeat(c) + '</tr>').repeat(r) + '</table><p><br></p>'); };
-  $('#tp-br').onmousedown = e => e.preventDefault();
-  $('#tp-br').onclick = () => { ed.focus(); document.execCommand('insertHTML', false, '<div style="page-break-after:always;border-top:1px dashed #aaa"></div><p><br></p>'); };
+
+  // ---- pilihan teks yang tersimpan saat fokus pindah ke toolbar
+  let saved = null;
+  document.addEventListener('selectionchange', () => { const s = getSelection(); if (s.rangeCount && ed.contains(s.anchorNode)) { saved = s.getRangeAt(0).cloneRange(); syncTools(); } });
+  const restore = () => { ed.focus(); if (saved) { const s = getSelection(); s.removeAllRanges(); s.addRange(saved); } };
+  const keep = b => b.onmousedown = e => e.preventDefault();
+  $$('.tb button', root).forEach(keep);
+  const cmd = (c, a) => { restore(); document.execCommand(c, false, a == null ? null : a); };
+  $$('.tb [data-c]', root).forEach(b => b.onclick = () => cmd(b.dataset.c, b.dataset.a));
+
+  // ---- ukuran huruf numerik (pt)
+  const fix = () => { $$('font[size="7"]', ed).forEach(f => { const s = document.createElement('span'); s.innerHTML = f.innerHTML; f.replaceWith(s); s.style.fontSize = 'xxx-large'; }); $$('span', ed).forEach(s => { if (s.style.fontSize === 'xxx-large') s.style.fontSize = ed.dataset.pt + 'pt'; }); };
+  const normTables = () => $$('table', ed).forEach(t => { if (!t.style.width) t.style.width = '100%'; t.style.borderCollapse = 'collapse'; });
+  const setSize = pt => { pt = Math.max(6, Math.min(72, pt)); restore(); ed.dataset.pt = pt; const s = getSelection();
+    if (s.isCollapsed) { const b = blocks()[0]; if (b) b.style.fontSize = pt + 'pt'; } else { document.execCommand('fontSize', false, '7'); fix(); }
+    $('#tp-fs').value = pt; };
+  $('#tp-fs').onchange = e => setSize(+e.target.value || 11);
+  $('#tp-fp').onclick = () => setSize((+$('#tp-fs').value || 11) + 1); $('#tp-fm').onclick = () => setSize((+$('#tp-fs').value || 11) - 1);
+  $('#tp-ff').onchange = e => cmd('fontName', e.target.value);
+  $('#tp-col').oninput = e => cmd('foreColor', e.target.value); $('#tp-hl').oninput = e => cmd('hiliteColor', e.target.value);
+  $('#tp-blk').onchange = e => cmd('formatBlock', e.target.value);
+  const syncTools = () => { const s = getSelection(), n = s.anchorNode && (s.anchorNode.nodeType === 1 ? s.anchorNode : s.anchorNode.parentElement); if (n && ed.contains(n)) { const f = parseFloat(getComputedStyle(n).fontSize) * 0.75; if (f && document.activeElement === ed) $('#tp-fs').value = Math.round(f * 2) / 2; } };
+
+  // ---- spasi baris & jarak paragraf untuk blok yang terpilih
+  function blocks() {
+    const s = getSelection(); if (!s.rangeCount) return [];
+    const all = [...ed.querySelectorAll('p,div:not(.pbk),li,h1,h2,h3,blockquote,td,th')].filter(el => !el.querySelector('p,div:not(.pbk),li,h1,h2,h3,td,th,table'));
+    const r = s.getRangeAt(0), hit = all.filter(el => r.intersectsNode(el));
+    if (hit.length) return hit;
+    let n = s.anchorNode; n = n && (n.nodeType === 1 ? n : n.parentElement); while (n && n !== ed && !/^(P|DIV|LI|H1|H2|H3|TD|TH|BLOCKQUOTE)$/.test(n.tagName)) n = n.parentElement;
+    return n && n !== ed ? [n] : [];
+  }
+  const spacing = (id, prop, unit) => $('#' + id).onchange = e => { const v = e.target.value; restore(); blocks().forEach(b => { b.style[prop] = v === '' ? '' : v + unit; }); e.target.value = ''; };
+  spacing('tp-lh', 'lineHeight', ''); spacing('tp-sb', 'marginTop', 'pt'); spacing('tp-sa', 'marginBottom', 'pt');
+  $('#tp-var').onchange = e => { if (e.target.value) cmd('insertText', '${' + e.target.value + '}'); e.target.value = ''; };
+
+  // ---- tabel
+  const cellNow = () => { const s = getSelection(); let n = (saved && saved.startContainer) || s.anchorNode; n = n && (n.nodeType === 1 ? n : n.parentElement); const c = n && n.closest && n.closest('td,th'); return c && ed.contains(c) ? c : null; };
+  const need = () => { const c = cellNow(); if (!c) toast('Klik di dalam sel tabel dulu.'); return c; };
+  const newCell = () => { const c = document.createElement('td'); c.style.cssText = 'border:1px solid #000;padding:3px 5px'; c.innerHTML = '<br>'; return c; };
+  $('#tp-tbl').onclick = () => { const r = +prompt('Jumlah baris', '3') || 0, c = +prompt('Jumlah kolom', '2') || 0; if (!r || !c) return; restore(); const w = (100 / c).toFixed(2); document.execCommand('insertHTML', false, '<table style="table-layout:fixed;width:100%;border-collapse:collapse">' + ('<tr>' + `<td style="border:1px solid #000;padding:3px 5px;width:${w}%"><br></td>`.repeat(c) + '</tr>').repeat(r) + '</table><p><br></p>'); normTables(); };
+  $('#tp-ra').onclick = () => { const c = need(); if (!c) return; const tr = c.parentElement, n = tr.cloneNode(true); [...n.cells].forEach(x => { x.innerHTML = '<br>'; x.style.height = ''; }); tr.after(n); };
+  $('#tp-ca').onclick = () => { const c = need(); if (!c) return; const i = c.cellIndex, t = c.closest('table'); [...t.rows].forEach(r => { const x = newCell(); if (r.cells[i]) { x.style.width = r.cells[i].style.width; r.cells[i].after(x); } else r.append(x); }); eqCols(t); };
+  $('#tp-rd').onclick = () => { const c = need(); if (!c) return; const t = c.closest('table'); c.parentElement.remove(); if (!t.rows.length) t.remove(); };
+  $('#tp-cd').onclick = () => { const c = need(); if (!c) return; const i = c.cellIndex, t = c.closest('table'); [...t.rows].forEach(r => r.cells[i] && r.cells[i].remove()); if (![...t.rows].some(r => r.cells.length)) t.remove(); else eqCols(t); };
+  $('#tp-td').onclick = () => { const c = need(); if (c) c.closest('table').remove(); };
+  $('#tp-bd').onchange = e => { const c = need(); if (c && e.target.value !== '') $$('td,th', c.closest('table')).forEach(x => { x.style.border = e.target.value === '1' ? '1px solid #000' : '0'; }); e.target.value = ''; };
+  function eqCols(t) { const n = t.rows[0] ? t.rows[0].cells.length : 0; if (!n) return; [...t.rows].forEach(r => [...r.cells].forEach(x => { x.style.width = (100 / n).toFixed(2) + '%'; })); }
+  // ubah ukuran dengan menarik garis sel
+  let drag = null; const EDGE = 5;
+  const edge = e => { const c = e.target.closest && e.target.closest('td,th'); if (!c || !ed.contains(c)) return null; const r = c.getBoundingClientRect(); if (r.right - e.clientX <= EDGE) return { c, kind: 'col' }; if (r.bottom - e.clientY <= EDGE) return { c, kind: 'row' }; return null; };
+  ed.addEventListener('mousemove', e => { if (drag) return; const h = edge(e); ed.style.cursor = h ? (h.kind === 'col' ? 'col-resize' : 'row-resize') : ''; });
+  ed.addEventListener('mousedown', e => {
+    const h = edge(e); if (!h) return; e.preventDefault();
+    const t = h.c.closest('table'), r0 = t.getBoundingClientRect();
+    if (h.kind === 'col') { const i = h.c.cellIndex, first = [...t.rows[0].cells].map(x => x.getBoundingClientRect().width); t.style.tableLayout = 'fixed'; drag = { kind: 'col', t, i, x: e.clientX, w: first, W: r0.width }; }
+    else drag = { kind: 'row', tr: h.c.parentElement, y: e.clientY, h: h.c.parentElement.getBoundingClientRect().height };
+  });
+  document.addEventListener('mousemove', e => {
+    if (!drag) return;
+    if (drag.kind === 'col') { const dx = e.clientX - drag.x, w = drag.w.slice(), i = drag.i, j = i + 1 < w.length ? i + 1 : -1;
+      const a = Math.max(24, w[i] + dx); const d = a - w[i]; w[i] = a; if (j >= 0) w[j] = Math.max(24, w[j] - d);
+      const tot = w.reduce((x, y) => x + y, 0); [...drag.t.rows].forEach(r => w.forEach((v, k) => { if (r.cells[k]) r.cells[k].style.width = (v / tot * 100).toFixed(2) + '%'; })); }
+    else [...drag.tr.cells].forEach(c => { c.style.height = Math.max(14, drag.h + e.clientY - drag.y) + 'px'; });
+  });
+  document.addEventListener('mouseup', () => { drag = null; });
+
+  // ---- gambar
+  let img = null;
+  $('#tp-img').onclick = () => $('#tp-imgf').click();
+  $('#tp-imgf').onchange = e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { restore(); document.execCommand('insertHTML', false, `<img src="${r.result}" style="width:40mm">`); }; r.readAsDataURL(f); e.target.value = ''; };
+  ed.addEventListener('click', e => { $$('img', ed).forEach(i => i.style.outline = ''); if (e.target.tagName === 'IMG') { img = e.target; img.style.outline = '2px solid #3f5f7f'; $('#tp-iw').disabled = false; $('#tp-iw').value = Math.round(img.getBoundingClientRect().width / 3.7795); } else { img = null; $('#tp-iw').disabled = true; } });
+  $('#tp-iw').oninput = e => { if (img) img.style.width = (+e.target.value || 10) + 'mm'; };
+  ed.addEventListener('paste', e => { const f = [...(e.clipboardData ? e.clipboardData.items : [])].find(i => i.kind === 'file' && i.type.startsWith('image/')); if (!f) return; e.preventDefault(); const r = new FileReader(); r.onload = () => document.execCommand('insertHTML', false, `<img src="${r.result}" style="width:40mm">`); r.readAsDataURL(f.getAsFile()); });
+  $('#tp-br').onclick = () => { restore(); document.execCommand('insertHTML', false, '<div class="pbk" contenteditable="false" style="border-top:1px dashed #c33;margin:8px 0;color:#c33;font:10px sans-serif;text-align:center;user-select:none">— halaman baru —</div><p><br></p>'); };
+
   sel.onchange = () => { cur = sel.value; load(); };
   $('#tp-new').onclick = () => { cur = null; ed.innerHTML = TPL_DEFAULT; $('#tp-nama').value = 'Surat baru'; sel.value = ''; };
   $('#tp-del').onclick = () => { if (!cur || !confirm('Hapus template ini?')) return; list = list.filter(t => t.id !== cur); tplSave(list); cur = list[0] ? list[0].id : null; fillSel(); load(); };
   $('#tp-save').onclick = () => { store(); toast('Template tersimpan.'); };
   $('#tp-exp').onclick = () => { store(); download(new Blob([JSON.stringify(list, null, 1)], { type: 'application/json' }), 'template-surat.json'); };
   $('#tp-imp').onchange = async e => { const f = e.target.files[0]; if (!f) return; try { const a = JSON.parse(await f.text()); for (const t of a) if (t && t.html) { t.id = uid(); list.push(t); } tplSave(list); cur = list[list.length - 1].id; fillSel(); load(); toast('Template diimpor.'); } catch { toast('Berkas template tidak valid.'); } e.target.value = ''; };
-  $('#tp-pv').onclick = () => { store(); const v = tplValues($('#tp-kg').value), nm = $('#tp-nama').value.trim() || 'Surat'; showPreview({ title: nm, html: PdfDoc.surat(tplFill(ed.innerHTML, v), $('#tp-kop').checked), filename: `${safe(nm)}.pdf` }); };
+  $('#tp-pv').onclick = () => {
+    normTables(); store(); $$('img', ed).forEach(i => i.style.outline = '');
+    const v = tplValues($('#tp-kg').value), nm = $('#tp-nama').value.trim() || 'Surat';
+    showPreview({ title: nm, html: PdfDoc.surat(tplFill(ed.innerHTML.replace(/\scontenteditable="false"/g, ''), v), $('#tp-kop').checked, marg()), filename: `${safe(nm)}.pdf` });
+  };
 }
 // ============================================================ PENGATURAN
 $('#b-set').onclick = () => {
