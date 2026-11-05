@@ -11,7 +11,7 @@ const COLS = {
   Klien: ['id', 'nama', 'jk', 'tempat_lahir', 'tgl_lahir', 'agama', 'suku', 'pendidikan', 'pekerjaan', 'kawin', 'alamat', 'perkara', 'pasal', 'asal_lembaga'],
   Status: ['id', 'klien_id', 'status', 'tgl_alih', 'layanan', 'pk_id'],
   Dokumen: ['id', 'klien_id', 'status_id', 'jenis', 'nomor', 'tgl_dokumen', 'perkara', 'tempat', 'pidana'],
-  Kegiatan: ['id', 'dokumen_id', 'tgl_sprint', 'tgl_pel', 'staf', 'hasil', 'monev'],
+  Kegiatan: ['id', 'dokumen_id', 'tgl_sprint', 'tgl_pel', 'staf', 'hasil', 'monev', 'link_sprint'],
   PK: ['id', 'nama', 'nama_singkat', 'nip', 'alias'],
   PKRiwayat: ['id', 'pk_id', 'mulai', 'golongan', 'tipe', 'jenjang'],
   Kepala: ['id', 'nama', 'nip', 'mulai'],

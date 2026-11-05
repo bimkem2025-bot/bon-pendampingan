@@ -763,17 +763,87 @@ function renderRekap() {
   const rows = all.filter(r => !sel.value || r.tgl.startsWith(sel.value)).map((r, i) => ({ ...r, no: i + 1 }));
   const mv = rows.filter(r => r.monev).length, total = rows.reduce((a, r) => a + r.biaya, 0), belum = queue().length;
   $('#r-sum').textContent = `${rows.length} pengajuan · masuk monev ${mv} · tanpa jatah monev ${rows.length - mv} · total biaya ${Doc.rupiah(total)}${belum ? ` · ${belum} dokumen belum dijadwalkan` : ''}`;
-  $('#r-list').innerHTML = rows.length ? `<table><tr><th>No</th><th>Tgl pelaksanaan</th><th>Klien</th><th>Status</th><th>Layanan</th><th>Dokumen</th><th>Sprint</th><th>PK</th><th>Biaya</th><th>Monev</th></tr>${rows.map(r => `<tr data-id="${r.g.id}"><td>${r.no}</td><td>${Doc.hari(r.tgl)}, ${Doc.tgl(r.tgl)}</td><td>${esc(r.nama)}</td><td><span class="tag">${esc(r.status)}</span></td><td>${esc(r.layanan)}</td><td>${esc(r.dokumen)}</td><td>${Doc.tgl(r.sprint)}</td><td>${esc(r.pk)}</td><td style="white-space:nowrap">${Doc.rupiah(r.biaya)}</td><td><button type="button" class="sm mv ${r.monev ? 'pri' : ''}" title="Klik untuk mengubah tanda monev">${r.monev ? '✓ Masuk monev' : 'Tanpa jatah'}</button></td></tr>`).join('')}</table>` : '<p class="hint">Belum ada kegiatan terjadwal.</p>';
+  $('#r-list').innerHTML = rows.length ? `<table><tr><th>No</th><th>Tgl pelaksanaan</th><th>Klien</th><th>Status</th><th>Layanan</th><th>Dokumen</th><th>Sprint</th><th>PK</th><th>Biaya</th><th>Monev</th><th>Berkas</th></tr>${rows.map(r => `<tr data-id="${r.g.id}"><td>${r.no}</td><td>${Doc.hari(r.tgl)}, ${Doc.tgl(r.tgl)}</td><td>${esc(r.nama)}</td><td><span class="tag">${esc(r.status)}</span></td><td>${esc(r.layanan)}</td><td>${esc(r.dokumen)}</td><td>${Doc.tgl(r.sprint)}</td><td>${esc(r.pk)}</td><td style="white-space:nowrap">${Doc.rupiah(r.biaya)}</td><td><button type="button" class="sm mv ${r.monev ? 'pri' : ''}" title="Klik untuk mengubah tanda monev">${r.monev ? '✓ Masuk monev' : 'Tanpa jatah'}</button></td><td><button type="button" class="sm bk">${r.g.link_sprint ? '🔗 ' : ''}Berkas</button></td></tr>`).join('')}</table>` : '<p class="hint">Belum ada kegiatan terjadwal.</p>';
   $$('#r-list .mv').forEach(b => b.onclick = guard(async () => {
     if (b.disabled) return; b.disabled = true;
     const g = data.kegiatan.find(x => x.id === b.closest('tr').dataset.id);
     await upsert('Kegiatan', { ...g, monev: monevOf(g) ? '0' : '1' }); renderRekap();
   }));
+  $$('#r-list .bk').forEach(b => b.onclick = () => berkasDialog(b.closest('tr').dataset.id));
   $('#r-csv').onclick = () => {
     const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
     const csv = [['No', 'Tanggal pelaksanaan', 'Klien', 'Status', 'Layanan', 'Dokumen', 'Tanggal sprint', 'PK', 'Biaya', 'Masuk monev']].concat(rows.map(r => [r.no, r.tgl, r.nama, r.status, r.layanan, r.dokumen, r.sprint, r.pk, r.biaya, r.monev ? 'Ya' : 'Tidak'])).map(l => l.map(q).join(',')).join('\r\n');
     download(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }), `Rekap pengajuan${sel.value ? ' ' + sel.value : ''}.csv`);
   };
+}
+// ============================================================ BERKAS pengajuan: Sprint (link/berkas), Laporan + cap QR, Lampiran, gabung PDF
+// Berkas hanya disimpan di browser ini (IndexedDB); yang masuk Google Sheet hanya link Sprint.
+function berkasDialog(id) {
+  const g = data.kegiatan.find(x => x.id === id), x = g && itemFor(g); if (!x) return;
+  const dlg = $('#bk'), body = $('#bk-body');
+  const stKey = 'bon_stamp_' + id;
+  let st = { page: 0, x: 0.55, y: 0.78, w: 0.36, ...(JSON.parse(localStorage.getItem(stKey) || 'null') || {}) };
+  let recs = {}, pages = 1;
+  const s = sFor(x.pk_id, g.tgl_pel) || {};
+  const lines = () => ['Ditandatangani elektronik oleh', s.pk_nama_gelar || s.pk_nama || 'PK', 'Bapas Kelas II Sintang', Doc.tgl(g.tgl_pel)];
+  const qrText = () => `Laporan Pendampingan ${data.settings.instansi || 'Bapas Kelas II Sintang'} | ${s.pk_nama_gelar || s.pk_nama || ''} | ${g.tgl_pel} | ${g.id}`;
+  const nm = r => r ? esc(r.name) : '<span class="hint">belum ada</span>';
+  body.innerHTML = `<div id="bk-f" style="padding:20px"><h2>Berkas · ${esc(x.k.nama)}</h2><p class="hint">${Doc.hari(g.tgl_pel)}, ${Doc.tgl(g.tgl_pel)} · ${esc(KEG_LABEL[x.keg.jenis])}. Berkas disimpan hanya di browser ini, tidak dikirim ke server mana pun.</p>
+    <h3 style="margin-top:14px">1. Sprint (dari aplikasi lain)</h3>
+    <div class="row"><input id="bk-link" class="grow" placeholder="Tempel link hasil dokumen Sprint" value="${esc(g.link_sprint || '')}"><button type="button" id="bk-open" class="sm">Buka</button></div>
+    <div class="row" style="margin-top:6px"><label class="inline">Berkas PDF/gambar Sprint untuk digabung <input type="file" id="bk-f-sprint" accept="application/pdf,image/*"></label><span id="bk-n-sprint" class="hint"></span></div>
+    <h3 style="margin-top:14px">2. Laporan (dari lokal)</h3>
+    <div class="row"><input type="file" id="bk-f-laporan" accept="application/pdf,image/*"><span id="bk-n-laporan" class="hint"></span></div>
+    <div id="bk-stamp" hidden><p class="hint">Klik pada halaman untuk menaruh cap tanda tangan QR. Geser ukuran lewat slider.</p>
+      <div class="row"><label class="inline">Halaman <input type="number" id="bk-pg" min="1" value="1" style="width:70px"></label><label class="inline">Ukuran <input type="range" id="bk-w" min="15" max="60" value="36" style="width:140px"></label><label class="inline"><input type="checkbox" id="bk-on" checked> Pasang cap</label></div>
+      <div style="position:relative;display:inline-block;margin-top:8px;border:1px solid var(--line2)"><canvas id="bk-cv" style="display:block;max-width:100%"></canvas><img id="bk-mk" style="position:absolute;pointer-events:none"></div></div>
+    <h3 style="margin-top:14px">3. Lampiran (dari lokal)</h3>
+    <div class="row"><input type="file" id="bk-f-lampiran" accept="application/pdf,image/*"><span id="bk-n-lampiran" class="hint"></span></div>
+    <div class="acts"><button type="button" id="bk-x" class="ghost">Tutup</button><button type="button" id="bk-dl" class="pri">Gabung &amp; unduh PDF</button></div></div>`;
+  const cv = $('#bk-cv'), mk = $('#bk-mk');
+  const place = () => {
+    if (!cv.width) return;
+    const { url, ratio } = Berkas.stampPng(lines(), qrText());
+    mk.src = url; mk.hidden = !$('#bk-on').checked;
+    const k = cv.clientWidth / cv.width;
+    mk.style.width = st.w * cv.clientWidth + 'px'; mk.style.height = st.w * cv.clientWidth * ratio + 'px';
+    mk.style.left = st.x * cv.clientWidth + 'px'; mk.style.top = st.y * cv.clientHeight + 'px'; void k;
+  };
+  const draw = async () => {
+    if (!recs.laporan) { $('#bk-stamp').hidden = true; return; }
+    $('#bk-stamp').hidden = false;
+    const doc = await Berkas.asPdf(recs.laporan); pages = doc.getPageCount(); st.page = Math.min(st.page, pages - 1); $('#bk-pg').max = pages; $('#bk-pg').value = st.page + 1;
+    const bytes = await doc.save();
+    await Berkas.render({ blob: new Blob([bytes], { type: 'application/pdf' }), name: 'x.pdf', type: 'application/pdf' }, st.page, cv, 520);
+    $('#bk-w').value = Math.round(st.w * 100); place();
+  };
+  const refresh = async () => {
+    for (const k of ['sprint', 'laporan', 'lampiran']) { recs[k] = await Berkas.get(id, k); $('#bk-n-' + k).innerHTML = recs[k] ? esc(recs[k].name) + ' <button type="button" class="sm ghost danger" data-rm="' + k + '">hapus</button>' : ''; }
+    $$('#bk-f [data-rm]').forEach(b => b.onclick = async () => { await Berkas.del(id, b.dataset.rm); await refresh(); });
+    await draw();
+  };
+  ['sprint', 'laporan', 'lampiran'].forEach(k => $('#bk-f-' + k).onchange = guard(async e => { const f = e.target.files[0]; if (!f) return; await Berkas.put(id, k, f); e.target.value = ''; await refresh(); }));
+  $('#bk-link').onchange = guard(async e => { await upsert('Kegiatan', { ...g, link_sprint: e.target.value.trim() }); g.link_sprint = e.target.value.trim(); toast('Link Sprint tersimpan.'); });
+  $('#bk-open').onclick = () => { const v = $('#bk-link').value.trim(); if (/^https?:\/\//i.test(v)) window.open(v, '_blank', 'noopener'); else toast('Isi link yang diawali https://'); };
+  const save = () => localStorage.setItem(stKey, JSON.stringify(st));
+  cv.onclick = e => { const r = cv.getBoundingClientRect(); st.x = Math.max(0, Math.min(1 - st.w, (e.clientX - r.left) / r.width - st.w / 2)); st.y = Math.max(0, (e.clientY - r.top) / r.height - 0.04); save(); place(); };
+  $('#bk-w').oninput = e => { st.w = e.target.value / 100; save(); place(); };
+  $('#bk-on').onchange = place;
+  $('#bk-pg').onchange = e => { st.page = Math.max(0, Math.min(pages - 1, (+e.target.value || 1) - 1)); save(); draw(); };
+  $('#bk-x').onclick = () => dlg.close();
+  $('#bk-dl').onclick = guard(async () => {
+    const parts = [];
+    let sp = recs.sprint;
+    if (!sp && /^https?:\/\//i.test(g.link_sprint || '')) { try { const r = await fetch(g.link_sprint); if (r.ok) { const b = await r.blob(); if (/pdf|image/.test(b.type)) sp = { blob: b, name: 'sprint', type: b.type }; } } catch { /* diblokir CORS: pakai berkas lokal */ } }
+    if (!sp) toast('Sprint dilewati: link tidak dapat diambil dari browser (diblokir situs asal). Unggah berkas Sprint di langkah 1 agar ikut digabung.', 7000); else parts.push(sp);
+    if (recs.laporan) {
+      if ($('#bk-on').checked) { const bytes = await Berkas.stamp(recs.laporan, st, lines(), qrText()); parts.push({ blob: new Blob([bytes], { type: 'application/pdf' }), name: 'laporan.pdf', type: 'application/pdf' }); } else parts.push(recs.laporan);
+    }
+    if (recs.lampiran) parts.push(recs.lampiran);
+    if (!parts.length) return toast('Belum ada berkas untuk digabung.');
+    download(new Blob([await Berkas.merge(parts)], { type: 'application/pdf' }), `Pengajuan ${safe(x.k.nama)} ${g.tgl_pel}.pdf`);
+  });
+  dlg.showModal(); refresh();
 }
 // ============================================================ PENGATURAN
 $('#b-set').onclick = () => {
