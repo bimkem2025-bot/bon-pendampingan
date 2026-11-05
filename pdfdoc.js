@@ -103,7 +103,7 @@ const PdfDoc = (() => {
   }
 
   // ---------------------------------------------------------------- LAPORAN (1 kegiatan, foto lampiran)
-  function laporan({ keg, k, photos }, s) {
+  function laporan({ keg, k, photos, ttd }, s) {
     const put = keg.jenis === 'PUTUSAN';
     const judul = put ? 'PELAKSANAAN PUTUSAN KLIEN DEWASA' : 'PEMENUHAN HAK KLIEN DEWASA';
     const lines = keg.hasil && keg.hasil.trim() ? keg.hasil.split('\n').map(l => l.trim()).filter(Boolean) : Doc.defaultHasil(keg);
@@ -128,7 +128,7 @@ const PdfDoc = (() => {
       <div class="in">${kv([[s.pk_label || 'Pembimbing Kemasyarakatan', s.pk_nama], [put ? 'Staf Subsi Registrasi' : 'Staf Subsi Perawatan Tahanan', staf], ['Klien', k.nama]])}</div>
       <div class="hd"><span>IV.</span>HASIL PENDAMPINGAN ${judul}</div>
       <ul class="bl">${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>
-      <div class="ttd lf">Sintang, ${tglL}<br>${esc(s.pk_label || 'Pembimbing Kemasyarakatan')}<div class="sp"></div>${esc(s.pk_nama_gelar)}</div>`) + lamp);
+      <div class="ttd lf">Sintang, ${tglL}<br>${esc(s.pk_label || 'Pembimbing Kemasyarakatan')}<div class="sp">${ttd ? `<img src="${ttd}" alt="" style="height:19mm;width:auto;display:block;margin:1mm 0">` : ''}</div>${esc(s.pk_nama_gelar)}</div>`) + lamp);
   }
   const umur = (a, b) => { const x = Doc.parse(a), y = Doc.parse(b); let u = y.getFullYear() - x.getFullYear(); if (y.getMonth() < x.getMonth() || (y.getMonth() === x.getMonth() && y.getDate() < x.getDate())) u--; return u; };
 

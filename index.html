@@ -54,7 +54,7 @@
       <div class="row between"><h2>Unduh dokumen</h2>
         <div class="row"><select id="p-bulan"></select><label class="inline">Tgl BON <input type="date" id="p-tglbon"></label></div></div>
       <div id="p-list"></div>
-      <div class="row sticky"><button id="p-bon" class="pri">Pratinjau BON (yang dicentang)</button><span class="hint" id="p-info"></span><span class="hint">SP dan Laporan: pratinjau &amp; unduh PDF satu per satu di tiap baris.</span></div>
+      <div class="row sticky"><button id="p-bon" class="pri">Pratinjau BON (yang dicentang)</button><button id="p-zsp">Unduh semua SP (ZIP)</button><button id="p-zlap">Unduh semua Laporan (ZIP)</button><span class="hint" id="p-info"></span><span class="hint">SP dan Laporan: pratinjau &amp; unduh PDF satu per satu di tiap baris.</span></div>
     </div>
   </section>
   <section id="tab-template" hidden><div class="pane wide" id="tp"></div></section>
@@ -76,7 +76,6 @@
 <script src="holidays.js"></script>
 <script src="lib/html2pdf.bundle.min.js"></script>
 <script src="lib/pdf-lib.min.js"></script>
-<script src="lib/pdf.min.js"></script>
 <script src="lib/qrcode.js"></script>
 <script src="docgen.js"></script>
 <script src="pdfdoc.js"></script>

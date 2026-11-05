@@ -30,6 +30,9 @@ Skrip membuang data klien dan nama penulis, lalu memasang tag `{nama}` dst. Doku
 `node tools/test_logic.js` (aturan tanggal, PK/Kepala, muat backend) dan `node tools/test_docgen.js` menghasilkan contoh dokumen di `out/` (perlu `out/foto.jpg` sembarang JPEG).
 
 
-## Berkas & Template
-- Rekap > tombol Berkas: link Sprint (disimpan di Sheet kolom link_sprint), unggah Laporan (dengan cap tanda tangan QR yang dapat diletakkan) dan Lampiran, lalu Gabung & unduh PDF. Berkas hanya disimpan di browser (IndexedDB), tidak dikirim ke server.
-- Tab Template: editor teks kaya dengan placeholder ${...}, pratinjau dan PDF dengan kop; template tersimpan di browser (ekspor/impor JSON).
+## Paket BON, TTD PK, Template
+- Rekap: centang pelaksanaan (satu PK) lalu **Buat paket BON**. Per paket: unggah BON bertanda tangan (halaman pertama), **Minta TTD PK** (QR/tautan ke ponsel, gambar hitam, sekali untuk semua laporan dalam paket; atau gambar di layar / unggah), lalu **Gabung & unduh PDF** = BON + per pelaksanaan (Sprint + Laporan bertanda tangan & foto + Lampiran). BON sendiri tidak diberi TTD elektronik.
+- Per pelaksanaan: link Sprint (kolom Sheet link_sprint) atau berkas Sprint, dan Lampiran dari lokal. Berkas, foto, dan TTD hanya di browser (IndexedDB), tidak dikirim ke server; hanya penitipan sementara TTD dari ponsel lewat cache Apps Script (maks 6 jam, sekali pakai).
+- Tab Unduh: unduh semua SP (ZIP) dan semua Laporan yang sudah ada foto (ZIP).
+- Tab Template: editor teks kaya dengan placeholder ${...}.
+

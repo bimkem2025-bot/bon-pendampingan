@@ -645,7 +645,7 @@ function renderUnduh() {
     const it = itemFor(g);
     return `<div class="krow" data-id="${g.id}"><input type="checkbox" class="pc" checked>
       <div><b>${esc(it.k.nama)}</b><br><span class="tag ${it.keg.jenis === 'PUTUSAN' ? 'b' : ''}">${esc(stCode(it.d))}</span>${KEG_LABEL[it.keg.jenis]}<br><small class="hint">${Doc.hari(g.tgl_pel)}, ${Doc.tgl(g.tgl_pel)} · sprint ${Doc.tgl(g.tgl_sprint)}</small></div>
-      <div><div class="row" style="margin-bottom:8px"><button class="pri sm" data-do="sp">Pratinjau SP</button><button class="pri sm" data-do="lap">Pratinjau Laporan</button><button class="sm" data-do="qr" title="Bubuhkan tanda tangan QR pada laporan (halaman mana pun), lalu gabung dengan Sprint dan Lampiran">TTD QR &amp; gabung</button></div><div class="drop" tabindex="0">Klik di sini lalu <b>tempel foto (Ctrl+V)</b>, atau seret foto ke sini</div><div class="thumbs"></div></div></div>`;
+      <div><div class="row" style="margin-bottom:8px"><button class="pri sm" data-do="sp">Pratinjau SP</button><button class="pri sm" data-do="lap">Pratinjau Laporan</button></div><div class="drop" tabindex="0">Klik di sini lalu <b>tempel foto (Ctrl+V)</b>, atau seret foto ke sini</div><div class="thumbs"></div></div></div>`;
   }).join('') || '<p class="hint">Belum ada kegiatan terjadwal. Jadwalkan di tab Kalender.</p>';
   $$('.krow', box).forEach(row => {
     const id = row.dataset.id, g = data.kegiatan.find(x => x.id === id), drop = $('.drop', row), th = $('.thumbs', row);
@@ -655,22 +655,24 @@ function renderUnduh() {
         const el = document.createElement('div');
         el.innerHTML = `<img src="${p.url}"><input value="${esc(p.caption)}" title="Keterangan foto"><button type="button" class="x">×</button>`;
         $('input', el).oninput = e => p.caption = e.target.value;
-        $('.x', el).onclick = () => { photos.get(id).splice(i, 1); draw(); };
+        $('input', el).onchange = () => savePh(id);
+        $('.x', el).onclick = () => { photos.get(id).splice(i, 1); savePh(id); draw(); };
         th.append(el);
       });
     };
     const add = files => {
       const l = photos.get(id) || [], j = kind(dokOf(g.dokumen_id));
       [...files].filter(f => f.type.startsWith('image/')).forEach(f => l.push({ file: f, url: URL.createObjectURL(f), caption: JENIS_FOTO[j] }));
-      photos.set(id, l); draw();
+      photos.set(id, l); savePh(id); draw();
     };
+    if (!(photos.get(id) || []).length) Berkas.getRaw(id, 'foto').then(r => { if (r && r.length && !(photos.get(id) || []).length) { photos.set(id, r.map(p => ({ file: p.blob, url: URL.createObjectURL(p.blob), caption: p.caption }))); draw(); } }).catch(() => { });
     const arm = () => { ui.paste = add; $$('.krow.armed').forEach(r => r.classList.remove('armed')); row.classList.add('armed'); };
     ['click', 'focus', 'mouseenter'].forEach(ev => drop.addEventListener(ev, arm)); row.addEventListener('mouseenter', arm);
     ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
     ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
     drop.addEventListener('drop', e => add(e.dataTransfer.files));
     draw();
-    $$('[data-do]', row).forEach(b => b.onclick = guard(async () => b.dataset.do === 'qr' ? berkasDialog(id) : (b.dataset.do === 'sp' ? previewSp : previewLap)(itemById(id))));
+    $$('[data-do]', row).forEach(b => b.onclick = guard(async () => (b.dataset.do === 'sp' ? previewSp : previewLap)(itemById(id))));
   });
   const last = list.length ? list[list.length - 1].tgl_pel : todayIso();
   if (!$('#p-tglbon').dataset.set) $('#p-tglbon').value = addDays(last, 1);
@@ -678,6 +680,8 @@ function renderUnduh() {
   $('#p-info').textContent = list.length ? `${list.length} kegiatan` : '';
 }
 
+// foto dokumentasi disimpan di browser (IndexedDB) agar tidak hilang saat halaman dimuat ulang
+const savePh = id => Berkas.putRaw(id, 'foto', (photos.get(id) || []).map(p => ({ blob: p.file, caption: p.caption }))).catch(() => { });
 function chosen() {
   const ids = $$('.krow').filter(r => $('.pc', r).checked).map(r => r.dataset.id);
   const it = ids.map(id => itemFor(data.kegiatan.find(g => g.id === id))).filter(Boolean);
@@ -725,10 +729,10 @@ function previewSp(x) {
   const s = sFor(x.pk_id, spDate(x));
   showPreview({ info: pkInfo(x.pk_id, spDate(x)), title: `Surat Perintah · ${x.k.nama}`, html: PdfDoc.sp(x.keg, x.k, s), filename: `SP ${safe(x.k.nama)}.pdf`, docx: () => Doc.sp(x.keg, x.k, s) });
 }
-function previewLap(x) {
+async function previewLap(x) {
   if (!x || !pkCheck([x], y => y.keg.tgl_pel)) return;
-  const s = sFor(x.pk_id, x.keg.tgl_pel);
-  showPreview({ info: pkInfo(x.pk_id, x.keg.tgl_pel), title: `Laporan · ${x.k.nama}`, html: PdfDoc.laporan(x, s), filename: `Laporan ${safe(x.k.nama)} ${x.keg.tgl_pel}.pdf`, docx: () => Doc.laporan([{ ...x, s }], data.settings) });
+  const s = sFor(x.pk_id, x.keg.tgl_pel), ttd = await ttdFor(x.g);
+  showPreview({ info: pkInfo(x.pk_id, x.keg.tgl_pel) + (ttd ? ' · TTD PK dari paket BON terpasang' : ''), title: `Laporan · ${x.k.nama}`, html: PdfDoc.laporan({ ...x, ttd }, s), filename: `Laporan ${safe(x.k.nama)} ${x.keg.tgl_pel}.pdf`, docx: () => Doc.laporan([{ ...x, s }], data.settings) });
 }
 $('#p-bon').onclick = guard(async () => {
   const it = chosen(); if (!it.length) return;
@@ -738,6 +742,32 @@ $('#p-bon').onclick = guard(async () => {
   const s = sFor(it[0].pk_id, tglBon);
   showPreview({ title: `BON · ${it.length} kegiatan`, html: PdfDoc.bon(it, s, tglBon), filename: `BON ${tglBon}.pdf`, docx: () => Doc.bon(it, s, tglBon) });
 });
+// ZIP: semua SP / semua Laporan (yang bergambar) dari baris yang dicentang
+async function zipAll(kind, btn) {
+  let it = chosen(); if (!it.length) return;
+  const date = kind === 'sp' ? spDate : (y => y.keg.tgl_pel);
+  if (kind === 'lap') {
+    const withPh = []; for (const x of it) { x.photos = await photosOf(x.g.id); if (x.photos.length) withPh.push(x); }
+    if (!withPh.length) return toast('Belum ada laporan yang punya foto. Tempel foto dulu di baris kegiatan.', 6000);
+    if (withPh.length < it.length) toast(`${it.length - withPh.length} laporan dilewati karena belum ada foto.`, 6000);
+    it = withPh;
+  }
+  if (!pkCheck(it, date)) return;
+  const l0 = btn.textContent; btn.disabled = true;
+  try {
+    const zip = new JSZip(), used = new Set();
+    for (let i = 0; i < it.length; i++) {
+      const x = it[i]; btn.textContent = `Membuat ${i + 1}/${it.length}…`;
+      const s = sFor(x.pk_id, date(x));
+      const html = kind === 'sp' ? PdfDoc.sp(x.keg, x.k, s) : PdfDoc.laporan({ ...x, ttd: await ttdFor(x.g) }, s);
+      let n = `${kind === 'sp' ? 'SP' : 'Laporan'} ${safe(x.k.nama)} ${x.keg.tgl_pel}`, c = 1; while (used.has(n)) n = n.replace(/( \(\d+\))?$/, ` (${++c})`);
+      used.add(n); zip.file(n + '.pdf', await PdfDoc.toBlob(html));
+    }
+    download(await zip.generateAsync({ type: 'blob' }), `${kind === 'sp' ? 'SP' : 'Laporan'} ${todayIso()}.zip`);
+  } finally { btn.disabled = false; btn.textContent = l0; }
+}
+$('#p-zsp').onclick = guard(() => zipAll('sp', $('#p-zsp')));
+$('#p-zlap').onclick = guard(() => zipAll('lap', $('#p-zlap')));
 // ============================================================ tempel foto (Ctrl+V) tanpa unggah
 document.addEventListener('paste', e => {
   if (ui.tab !== 'unduh' || !ui.paste || $('#dlg').open || $('#pv').open) return;
@@ -747,14 +777,24 @@ document.addEventListener('paste', e => {
   e.preventDefault(); ui.paste(files); toast(`${files.length} foto ditempel.`);
 });
 
-// ============================================================ REKAP pengajuan
+// ============================================================ REKAP pengajuan + PAKET BON
+// Paket BON = beberapa pelaksanaan (satu PK) yang diajukan dalam satu BON. Satu tanda tangan PK (dari ponsel) dipakai semua laporan dalam paket.
+// Hasil gabungan PDF: [BON unggahan] + per pelaksanaan [Sprint + Laporan bertanda tangan & foto + Lampiran]. Berkas hanya di browser ini.
+const bonTgl = b => (b || '').split('~')[0];
+const bonKey = b => 'bon_' + b;
+const pkTag = it => { const p = pkOf(it.pk_id); return p ? (p.nama_singkat || p.nama) : '-'; };
 $('#r-bulan').onchange = renderRekap;
 function rekapRows() {
   return data.kegiatan.filter(g => g.tgl_pel && itemFor(g)).sort((a, b) => a.tgl_pel.localeCompare(b.tgl_pel) || 0).map((g, i) => {
     const it = itemFor(g), pk = pkOf(it.pk_id);
     return { g, no: i + 1, tgl: g.tgl_pel, nama: it.k.nama, status: it.keg.status_klien, layanan: KEG_LABEL[it.keg.jenis], dokumen: dokLabel(it.d), sprint: g.tgl_sprint,
-      pk: pk ? (pk.nama_singkat || pk.nama) : '', biaya: Number(data.settings.uang) || 0, monev: monevOf(g) };
+      pk: pk ? (pk.nama_singkat || pk.nama) : '', biaya: Number(data.settings.uang) || 0, monev: monevOf(g), bon: g.bon || '' };
   });
+}
+async function ttdFor(g) { if (!g || !g.bon) return null; const r = await Berkas.get(bonKey(g.bon), 'ttd'); return r ? Berkas.dataUrl(r.blob) : null; }
+async function photosOf(id) {
+  const m = photos.get(id); if (m && m.length) return m;
+  const r = await Berkas.getRaw(id, 'foto'); return (r || []).map(p => ({ file: p.blob, url: URL.createObjectURL(p.blob), caption: p.caption }));
 }
 function renderRekap() {
   const all = rekapRows(), sel = $('#r-bulan'), keep = sel.value, months = [...new Set(all.map(r => r.tgl.slice(0, 7)))];
@@ -763,93 +803,190 @@ function renderRekap() {
   const rows = all.filter(r => !sel.value || r.tgl.startsWith(sel.value)).map((r, i) => ({ ...r, no: i + 1 }));
   const mv = rows.filter(r => r.monev).length, total = rows.reduce((a, r) => a + r.biaya, 0), belum = queue().length;
   $('#r-sum').textContent = `${rows.length} pengajuan · masuk monev ${mv} · tanpa jatah monev ${rows.length - mv} · total biaya ${Doc.rupiah(total)}${belum ? ` · ${belum} dokumen belum dijadwalkan` : ''}`;
-  $('#r-list').innerHTML = rows.length ? `<table><tr><th>No</th><th>Tgl pelaksanaan</th><th>Klien</th><th>Status</th><th>Layanan</th><th>Dokumen</th><th>Sprint</th><th>PK</th><th>Biaya</th><th>Monev</th><th>Berkas</th></tr>${rows.map(r => `<tr data-id="${r.g.id}"><td>${r.no}</td><td>${Doc.hari(r.tgl)}, ${Doc.tgl(r.tgl)}</td><td>${esc(r.nama)}</td><td><span class="tag">${esc(r.status)}</span></td><td>${esc(r.layanan)}</td><td>${esc(r.dokumen)}</td><td>${Doc.tgl(r.sprint)}</td><td>${esc(r.pk)}</td><td style="white-space:nowrap">${Doc.rupiah(r.biaya)}</td><td><button type="button" class="sm mv ${r.monev ? 'pri' : ''}" title="Klik untuk mengubah tanda monev">${r.monev ? '✓ Masuk monev' : 'Tanpa jatah'}</button></td><td><button type="button" class="sm bk">${r.g.link_sprint ? '🔗 ' : ''}Berkas</button></td></tr>`).join('')}</table>` : '<p class="hint">Belum ada kegiatan terjadwal.</p>';
+  if (!ui.rTgl) ui.rTgl = addDays(rows.length ? rows[rows.length - 1].tgl : todayIso(), 1);
+  $('#r-list').innerHTML = `<div id="r-pak"></div>
+    <div class="row" style="margin:12px 0 6px"><b>Pengajuan</b><span class="hint" style="margin:0">Centang beberapa pelaksanaan (satu PK) lalu buat paket BON.</span><span class="grow"></span>
+      <label class="inline">Tgl BON <input type="date" id="r-tglbon" value="${ui.rTgl}"></label><button type="button" id="r-mk" class="pri sm">Buat paket BON</button><button type="button" id="r-un" class="sm">Lepas dari paket</button></div>` +
+    (rows.length ? `<table><tr><th></th><th>No</th><th>Tgl pelaksanaan</th><th>Klien</th><th>Status</th><th>Layanan</th><th>Dokumen</th><th>Sprint</th><th>PK</th><th>Biaya</th><th>Monev</th><th>Paket BON</th><th>Berkas</th></tr>${rows.map(r => `<tr data-id="${r.g.id}"><td><input type="checkbox" class="rc"></td><td>${r.no}</td><td>${Doc.hari(r.tgl)}, ${Doc.tgl(r.tgl)}</td><td>${esc(r.nama)}</td><td><span class="tag">${esc(r.status)}</span></td><td>${esc(r.layanan)}</td><td>${esc(r.dokumen)}</td><td>${Doc.tgl(r.sprint)}</td><td>${esc(r.pk)}</td><td style="white-space:nowrap">${Doc.rupiah(r.biaya)}</td><td><button type="button" class="sm mv ${r.monev ? 'pri' : ''}" title="Klik untuk mengubah tanda monev">${r.monev ? '✓ Masuk monev' : 'Tanpa jatah'}</button></td><td>${r.bon ? Doc.tgl(bonTgl(r.bon)) : '<span class="hint">-</span>'}</td><td><button type="button" class="sm bk">${r.g.link_sprint ? '🔗 ' : ''}Sprint &amp; lampiran</button></td></tr>`).join('')}</table>` : '<p class="hint">Belum ada kegiatan terjadwal.</p>');
   $$('#r-list .mv').forEach(b => b.onclick = guard(async () => {
     if (b.disabled) return; b.disabled = true;
     const g = data.kegiatan.find(x => x.id === b.closest('tr').dataset.id);
     await upsert('Kegiatan', { ...g, monev: monevOf(g) ? '0' : '1' }); renderRekap();
   }));
-  $$('#r-list .bk').forEach(b => b.onclick = () => berkasDialog(b.closest('tr').dataset.id));
+  $$('#r-list .bk').forEach(b => b.onclick = () => pelDialog(b.closest('tr').dataset.id));
+  $('#r-tglbon').onchange = e => { ui.rTgl = e.target.value; };
+  const picked = () => $$('#r-list .rc').filter(c => c.checked).map(c => data.kegiatan.find(g => g.id === c.closest('tr').dataset.id));
+  $('#r-mk').onclick = guard(async () => {
+    const gs = picked(); if (!gs.length) return toast('Centang pelaksanaan yang masuk satu BON.');
+    const its = gs.map(itemFor);
+    if (new Set(its.map(x => pkKey(pkOf(x.pk_id)) || x.pk_id)).size > 1) return toast('Satu paket BON hanya untuk satu PK.', 6000);
+    const tgl = $('#r-tglbon').value || todayIso(), id = tgl + '~' + uid().slice(-4);
+    for (const g of gs) await upsert('Kegiatan', { ...g, bon: id });
+    toast(`Paket BON ${Doc.tgl(tgl)} dibuat (${gs.length} kegiatan).`); renderRekap();
+  });
+  $('#r-un').onclick = guard(async () => { const gs = picked().filter(g => g.bon); for (const g of gs) await upsert('Kegiatan', { ...g, bon: '' }); renderRekap(); });
   $('#r-csv').onclick = () => {
     const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-    const csv = [['No', 'Tanggal pelaksanaan', 'Klien', 'Status', 'Layanan', 'Dokumen', 'Tanggal sprint', 'PK', 'Biaya', 'Masuk monev']].concat(rows.map(r => [r.no, r.tgl, r.nama, r.status, r.layanan, r.dokumen, r.sprint, r.pk, r.biaya, r.monev ? 'Ya' : 'Tidak'])).map(l => l.map(q).join(',')).join('\r\n');
-    download(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }), `Rekap pengajuan${sel.value ? ' ' + sel.value : ''}.csv`);
+    const csv = [['No', 'Tanggal pelaksanaan', 'Klien', 'Status', 'Layanan', 'Dokumen', 'Tanggal sprint', 'PK', 'Biaya', 'Masuk monev', 'Paket BON']].concat(rows.map(r => [r.no, r.tgl, r.nama, r.status, r.layanan, r.dokumen, r.sprint, r.pk, r.biaya, r.monev ? 'Ya' : 'Tidak', r.bon ? bonTgl(r.bon) : ''])).map(l => l.map(q).join(',')).join('\r\n');
+    download(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }), `Rekap pengajuan${sel.value ? ' ' + sel.value : ''}.csv`);
   };
+  renderPaket();
 }
-// ============================================================ BERKAS pengajuan: Sprint (link/berkas), Laporan + cap QR, Lampiran, gabung PDF
-// Berkas hanya disimpan di browser ini (IndexedDB); yang masuk Google Sheet hanya link Sprint.
-function berkasDialog(id) {
+
+// ---- kartu paket BON
+function renderPaket() {
+  const box = $('#r-pak'); if (!box) return;
+  const by = {}; data.kegiatan.forEach(g => { if (g.bon && itemFor(g)) (by[g.bon] = by[g.bon] || []).push(g); });
+  const ids = Object.keys(by).sort().reverse();
+  box.innerHTML = ids.length ? '<b>Paket BON</b>' + ids.map(b => {
+    const gs = by[b].sort((x, y) => x.tgl_pel.localeCompare(y.tgl_pel)), it = gs.map(itemFor);
+    return `<div class="card pak" data-bon="${esc(b)}"><div class="row between"><b>BON ${Doc.tgl(bonTgl(b))} · ${esc(pkTag(it[0]))} · ${gs.length} kegiatan · ${Doc.rupiah((Number(data.settings.uang) || 0) * gs.length)}</b>
+      <span class="row"><button type="button" class="sm bonpv">Pratinjau BON</button><button type="button" class="sm danger dis">Bubarkan</button></span></div>
+      <div class="row" style="margin-top:8px"><span>1. BON bertanda tangan (scan): <b class="st-bon">…</b></span><input type="file" class="f-bon" accept="application/pdf,image/*" hidden><button type="button" class="sm up-bon">Unggah BON</button>
+        <span style="margin-left:12px">2. TTD PK untuk laporan: <b class="st-ttd">…</b></span><button type="button" class="sm req">Minta TTD PK (QR / tautan)</button></div>
+      <div class="row" style="margin-top:8px"><span class="hint st-peng" style="margin:0">…</span><span class="grow"></span><button type="button" class="pri merge">Gabung &amp; unduh PDF</button></div></div>`;
+  }).join('') : '';
+  $$('.pak', box).forEach(card => {
+    const b = card.dataset.bon, gs = by[b].sort((x, y) => x.tgl_pel.localeCompare(y.tgl_pel));
+    (async () => {
+      const bon = await Berkas.get(bonKey(b), 'file'), ttd = await Berkas.get(bonKey(b), 'ttd');
+      $('.st-bon', card).innerHTML = bon ? `✓ ${esc(bon.name)} <button type="button" class="sm ghost danger rm-bon">hapus</button>` : 'belum';
+      $('.st-ttd', card).innerHTML = ttd ? '✓ diterima <button type="button" class="sm ghost danger rm-ttd">hapus</button>' : 'belum';
+      let sp = 0, lp = 0; for (const g of gs) { if (g.link_sprint || await Berkas.get(g.id, 'sprint')) sp++; if ((await Berkas.list(g.id, 'lampiran')).length) lp++; }
+      $('.st-peng', card).textContent = `Per pelaksanaan: Sprint ${sp}/${gs.length} · Lampiran ${lp}/${gs.length} (atur di kolom "Sprint & lampiran")`;
+      const rb = $('.rm-bon', card); if (rb) rb.onclick = async () => { await Berkas.del(bonKey(b), 'file'); renderPaket(); };
+      const rt = $('.rm-ttd', card); if (rt) rt.onclick = async () => { await Berkas.del(bonKey(b), 'ttd'); renderPaket(); };
+    })();
+    $('.up-bon', card).onclick = () => $('.f-bon', card).click();
+    $('.f-bon', card).onchange = guard(async e => { const f = e.target.files[0]; if (!f) return; await Berkas.put(bonKey(b), 'file', f); renderPaket(); });
+    $('.req', card).onclick = () => ttdDialog(b);
+    $('.dis', card).onclick = guard(async () => {
+      if (!confirm('Bubarkan paket BON ini? Berkas BON dan TTD paket dihapus dari browser ini.')) return;
+      for (const g of gs) await upsert('Kegiatan', { ...g, bon: '' });
+      await Berkas.del(bonKey(b), 'file'); await Berkas.del(bonKey(b), 'ttd'); renderRekap();
+    });
+    $('.bonpv', card).onclick = guard(async () => {
+      const it = gs.map(itemFor), tgl = bonTgl(b); if (!pkCheck(it, () => tgl)) return;
+      const s = sFor(it[0].pk_id, tgl);
+      showPreview({ title: `BON · ${it.length} kegiatan`, html: PdfDoc.bon(it, s, tgl), filename: `BON ${tgl}.pdf`, docx: () => Doc.bon(it, s, tgl), info: 'Cetak, tanda tangan basah, pindai, lalu unggah sebagai "BON bertanda tangan".' });
+    });
+    $('.merge', card).onclick = guard(() => mergePaket(b, $('.merge', card)));
+  });
+}
+
+async function mergePaket(b, btn) {
+  const gs = data.kegiatan.filter(g => g.bon === b && itemFor(g)).sort((x, y) => x.tgl_pel.localeCompare(y.tgl_pel)), its = gs.map(itemFor);
+  if (!pkCheck(its, y => y.keg.tgl_pel)) return;
+  const l0 = btn.textContent; btn.disabled = true;
+  try {
+    const parts = [], warn = [];
+    const bon = await Berkas.get(bonKey(b), 'file'); if (bon) parts.push(bon); else warn.push('BON bertanda tangan belum diunggah');
+    const ttd = await ttdFor(gs[0]); if (!ttd) warn.push('TTD PK belum ada (laporan tanpa tanda tangan)');
+    for (let i = 0; i < gs.length; i++) {
+      const g = gs[i], x = its[i]; btn.textContent = `Menyusun ${i + 1}/${gs.length}…`;
+      let sp = await Berkas.get(g.id, 'sprint');
+      if (!sp && /^https?:\/\//i.test(g.link_sprint || '')) { try { const r = await fetch(g.link_sprint); if (r.ok) { const bl = await r.blob(); if (/pdf|image/.test(bl.type)) sp = { blob: bl, name: 'sprint', type: bl.type }; } } catch { /* diblokir situs asal */ } }
+      if (sp) parts.push(sp); else warn.push(`Sprint ${x.k.nama} ${Doc.tgl(g.tgl_pel)}`);
+      const html = PdfDoc.laporan({ ...x, photos: await photosOf(g.id), ttd }, sFor(x.pk_id, g.tgl_pel));
+      parts.push({ blob: await PdfDoc.toBlob(html), name: 'laporan.pdf', type: 'application/pdf' });
+      (await Berkas.list(g.id, 'lampiran')).forEach(r => parts.push(r));
+    }
+    btn.textContent = 'Menggabungkan…';
+    download(new Blob([await Berkas.merge(parts)], { type: 'application/pdf' }), `Paket BON ${bonTgl(b)} ${safe(pkTag(its[0]))}.pdf`);
+    if (warn.length) toast('Selesai, tetapi belum lengkap: ' + warn.join('; ') + '. (Link Sprint dari aplikasi lain sering tidak bisa diambil browser: unggah berkasnya.)', 12000);
+  } finally { btn.disabled = false; btn.textContent = l0; }
+}
+
+// ---- Sprint & Lampiran per pelaksanaan
+function pelDialog(id) {
   const g = data.kegiatan.find(x => x.id === id), x = g && itemFor(g); if (!x) return;
   const dlg = $('#bk'), body = $('#bk-body');
-  const stKey = 'bon_stamp_' + id;
-  let st = { page: 0, x: 0.55, y: 0.78, w: 0.36, ...(JSON.parse(localStorage.getItem(stKey) || 'null') || {}) };
-  let recs = {}, pages = 1;
-  const s = sFor(x.pk_id, g.tgl_pel) || {};
-  const lines = () => ['Ditandatangani elektronik oleh', s.pk_nama_gelar || s.pk_nama || 'PK', 'Bapas Kelas II Sintang', Doc.tgl(g.tgl_pel)];
-  const qrText = () => new URL('verifikasi.html', location.href).href.split('?')[0] + '?' + new URLSearchParams({ pk: s.pk_nama_gelar || s.pk_nama || '', tgl: g.tgl_pel, id: String(g.id).slice(-8) });
-  const nm = r => r ? esc(r.name) : '<span class="hint">belum ada</span>';
-  body.innerHTML = `<div id="bk-f" style="padding:20px"><h2>Berkas · ${esc(x.k.nama)}</h2><p class="hint">${Doc.hari(g.tgl_pel)}, ${Doc.tgl(g.tgl_pel)} · ${esc(KEG_LABEL[x.keg.jenis])}. Berkas disimpan hanya di browser ini, tidak dikirim ke server mana pun.</p>
-    <h3 style="margin-top:14px">1. Sprint (dari aplikasi lain)</h3>
-    <div class="row"><input id="bk-link" class="grow" placeholder="Tempel link hasil dokumen Sprint" value="${esc(g.link_sprint || '')}"><button type="button" id="bk-open" class="sm">Buka</button></div>
-    <div class="row" style="margin-top:6px"><label class="inline">Berkas PDF/gambar Sprint untuk digabung <input type="file" id="bk-f-sprint" accept="application/pdf,image/*"></label><span id="bk-n-sprint" class="hint"></span></div>
-    <h3 style="margin-top:14px">2. Laporan (satu-satunya dokumen yang diberi TTD QR; BON tetap tanda tangan basah)</h3>
-    <div class="row"><button type="button" id="bk-gen" class="sm pri">Pakai Laporan dari aplikasi ini</button><span class="hint">atau unggah dari lokal:</span><input type="file" id="bk-f-laporan" accept="application/pdf,image/*"><span id="bk-n-laporan" class="hint"></span></div>
-    <div id="bk-stamp" hidden><p class="hint">Klik pada halaman untuk menaruh cap tanda tangan QR. Geser ukuran lewat slider.</p>
-      <div class="row"><label class="inline">Halaman <input type="number" id="bk-pg" min="1" value="1" style="width:70px"></label><label class="inline">Ukuran <input type="range" id="bk-w" min="15" max="60" value="36" style="width:140px"></label><label class="inline"><input type="checkbox" id="bk-on" checked> Pasang cap</label></div>
-      <div style="position:relative;display:inline-block;margin-top:8px;border:1px solid var(--line2)"><canvas id="bk-cv" style="display:block;max-width:100%"></canvas><img id="bk-mk" style="position:absolute;pointer-events:none"></div></div>
-    <h3 style="margin-top:14px">3. Lampiran (dari lokal)</h3>
-    <div class="row"><input type="file" id="bk-f-lampiran" accept="application/pdf,image/*"><span id="bk-n-lampiran" class="hint"></span></div>
-    <div class="acts"><button type="button" id="bk-x" class="ghost">Tutup</button><button type="button" id="bk-dl" class="pri">Gabung &amp; unduh PDF</button></div></div>`;
-  const cv = $('#bk-cv'), mk = $('#bk-mk');
-  const place = () => {
-    if (!cv.width) return;
-    const { url, ratio } = Berkas.stampPng(lines(), qrText());
-    mk.src = url; mk.hidden = !$('#bk-on').checked;
-    const k = cv.clientWidth / cv.width;
-    mk.style.width = st.w * cv.clientWidth + 'px'; mk.style.height = st.w * cv.clientWidth * ratio + 'px';
-    mk.style.left = st.x * cv.clientWidth + 'px'; mk.style.top = st.y * cv.clientHeight + 'px'; void k;
-  };
-  const draw = async () => {
-    if (!recs.laporan) { $('#bk-stamp').hidden = true; return; }
-    $('#bk-stamp').hidden = false;
-    const doc = await Berkas.asPdf(recs.laporan); pages = doc.getPageCount(); st.page = Math.min(st.page, pages - 1); $('#bk-pg').max = pages; $('#bk-pg').value = st.page + 1;
-    const bytes = await doc.save();
-    await Berkas.render({ blob: new Blob([bytes], { type: 'application/pdf' }), name: 'x.pdf', type: 'application/pdf' }, st.page, cv, 520);
-    $('#bk-w').value = Math.round(st.w * 100); place();
-  };
+  body.innerHTML = `<div style="padding:20px"><h2>${esc(x.k.nama)}</h2><p class="hint">${Doc.hari(g.tgl_pel)}, ${Doc.tgl(g.tgl_pel)} · ${esc(KEG_LABEL[x.keg.jenis])}. Berkas disimpan hanya di browser ini.</p>
+    <h3 style="margin-top:12px">Sprint (hasil unduhan dari aplikasi lain)</h3>
+    <div class="row"><input id="bk-link" class="grow" placeholder="Link dokumen Sprint (opsional)" value="${esc(g.link_sprint || '')}"><button type="button" id="bk-open" class="sm">Buka</button></div>
+    <div class="row" style="margin-top:6px"><input type="file" id="bk-f-sprint" accept="application/pdf,image/*"><span id="bk-n-sprint" class="hint"></span></div>
+    <h3 style="margin-top:14px">Laporan</h3><p class="hint" id="bk-lap"></p>
+    <h3 style="margin-top:14px">Lampiran (dari lokal)</h3>
+    <div class="row"><input type="file" id="bk-f-lampiran" accept="application/pdf,image/*" multiple></div><div id="bk-n-lampiran"></div>
+    <div class="acts"><button type="button" id="bk-x" class="pri">Selesai</button></div></div>`;
   const refresh = async () => {
-    for (const k of ['sprint', 'laporan', 'lampiran']) { recs[k] = await Berkas.get(id, k); $('#bk-n-' + k).innerHTML = recs[k] ? esc(recs[k].name) + ' <button type="button" class="sm ghost danger" data-rm="' + k + '">hapus</button>' : ''; }
-    $$('#bk-f [data-rm]').forEach(b => b.onclick = async () => { await Berkas.del(id, b.dataset.rm); await refresh(); });
-    await draw();
+    const sp = await Berkas.get(id, 'sprint');
+    $('#bk-n-sprint').innerHTML = sp ? esc(sp.name) + ' <button type="button" class="sm ghost danger" id="bk-rm-sp">hapus</button>' : '';
+    if (sp) $('#bk-rm-sp').onclick = async () => { await Berkas.del(id, 'sprint'); refresh(); };
+    const l = await Berkas.list(id, 'lampiran');
+    $('#bk-n-lampiran').innerHTML = l.map((r, i) => `<div class="row" style="margin-top:4px">${esc(r.name)} <button type="button" class="sm ghost danger" data-i="${i}">hapus</button></div>`).join('');
+    $$('#bk-n-lampiran [data-i]').forEach(b => b.onclick = async () => { await Berkas.removeAt(id, 'lampiran', +b.dataset.i); refresh(); });
+    const ph = await photosOf(id);
+    $('#bk-lap').textContent = `Dibuat otomatis saat penggabungan paket: memakai TTD PK paket BON dan ${ph.length} foto dokumentasi (ditempel di tab Unduh).` + (g.bon ? '' : ' Kegiatan ini belum masuk paket BON.');
   };
-  ['sprint', 'laporan', 'lampiran'].forEach(k => $('#bk-f-' + k).onchange = guard(async e => { const f = e.target.files[0]; if (!f) return; await Berkas.put(id, k, f); e.target.value = ''; await refresh(); }));
-  $('#bk-gen').onclick = guard(async () => {
-    const it = itemById(id); if (!it || !pkCheck([it], y => y.keg.tgl_pel)) return;
-    const html = PdfDoc.laporan(it, sFor(it.pk_id, it.keg.tgl_pel));
-    const blob = await PdfDoc.toBlob(html); blob.name = `Laporan ${safe(it.k.nama)}.pdf`;
-    await Berkas.put(id, 'laporan', blob); await refresh(); toast('Laporan dibuat. Klik halaman untuk menaruh TTD QR.');
-  });
-  $('#bk-link').onchange = guard(async e => { await upsert('Kegiatan', { ...g, link_sprint: e.target.value.trim() }); g.link_sprint = e.target.value.trim(); toast('Link Sprint tersimpan.'); });
+  $('#bk-f-sprint').onchange = guard(async e => { const f = e.target.files[0]; if (!f) return; await Berkas.put(id, 'sprint', f); e.target.value = ''; refresh(); });
+  $('#bk-f-lampiran').onchange = guard(async e => { for (const f of e.target.files) await Berkas.add(id, 'lampiran', f); e.target.value = ''; refresh(); });
+  $('#bk-link').onchange = guard(async e => { const v = e.target.value.trim(); await upsert('Kegiatan', { ...g, link_sprint: v }); g.link_sprint = v; toast('Link Sprint tersimpan.'); });
   $('#bk-open').onclick = () => { const v = $('#bk-link').value.trim(); if (/^https?:\/\//i.test(v)) window.open(v, '_blank', 'noopener'); else toast('Isi link yang diawali https://'); };
-  const save = () => localStorage.setItem(stKey, JSON.stringify(st));
-  cv.onclick = e => { const r = cv.getBoundingClientRect(); st.x = Math.max(0, Math.min(1 - st.w, (e.clientX - r.left) / r.width - st.w / 2)); st.y = Math.max(0, (e.clientY - r.top) / r.height - 0.04); save(); place(); };
-  $('#bk-w').oninput = e => { st.w = e.target.value / 100; save(); place(); };
-  $('#bk-on').onchange = place;
-  $('#bk-pg').onchange = e => { st.page = Math.max(0, Math.min(pages - 1, (+e.target.value || 1) - 1)); save(); draw(); };
   $('#bk-x').onclick = () => dlg.close();
-  $('#bk-dl').onclick = guard(async () => {
-    const parts = [];
-    let sp = recs.sprint;
-    if (!sp && /^https?:\/\//i.test(g.link_sprint || '')) { try { const r = await fetch(g.link_sprint); if (r.ok) { const b = await r.blob(); if (/pdf|image/.test(b.type)) sp = { blob: b, name: 'sprint', type: b.type }; } } catch { /* diblokir CORS: pakai berkas lokal */ } }
-    if (!sp) toast('Sprint dilewati: link tidak dapat diambil dari browser (diblokir situs asal). Unggah berkas Sprint di langkah 1 agar ikut digabung.', 7000); else parts.push(sp);
-    if (recs.laporan) {
-      if ($('#bk-on').checked) { const bytes = await Berkas.stamp(recs.laporan, st, lines(), qrText()); parts.push({ blob: new Blob([bytes], { type: 'application/pdf' }), name: 'laporan.pdf', type: 'application/pdf' }); } else parts.push(recs.laporan);
-    }
-    if (recs.lampiran) parts.push(recs.lampiran);
-    if (!parts.length) return toast('Belum ada berkas untuk digabung.');
-    download(new Blob([await Berkas.merge(parts)], { type: 'application/pdf' }), `Pengajuan ${safe(x.k.nama)} ${g.tgl_pel}.pdf`);
-  });
+  dlg.onclose = renderRekap;
   dlg.showModal(); refresh();
+}
+
+// ---- tanda tangan PK: tautan/QR ke ponsel (digambar hitam), atau gambar di layar / unggah
+async function cropBlob(c) {
+  const w = c.width, h = c.height, D = c.getContext('2d').getImageData(0, 0, w, h).data; let a = w, b = h, r = 0, t = 0;
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (D[(j * w + i) * 4 + 3] > 20) { if (i < a) a = i; if (i > r) r = i; if (j < b) b = j; if (j > t) t = j; }
+  a = Math.max(0, a - 8); b = Math.max(0, b - 8); r = Math.min(w - 1, r + 8); t = Math.min(h - 1, t + 8);
+  const o = document.createElement('canvas'); o.width = r - a + 1; o.height = t - b + 1; o.getContext('2d').drawImage(c, a, b, o.width, o.height, 0, 0, o.width, o.height);
+  return new Promise(ok => o.toBlob(ok, 'image/png'));
+}
+function sigPad(host) {
+  host.innerHTML = '<canvas width="900" height="300" style="width:100%;max-width:520px;height:170px;border:1px dashed var(--line2);border-radius:8px;background:#fff;touch-action:none;display:block"></canvas><div class="row" style="margin-top:6px"><button type="button" class="sm sg-clr">Ulangi</button><button type="button" class="sm pri sg-ok">Pakai tanda tangan ini</button></div>';
+  const c = $('canvas', host), x = c.getContext('2d'); let d = false, n = 0;
+  x.lineWidth = 5; x.lineCap = x.lineJoin = 'round'; x.strokeStyle = '#000';
+  const pt = e => { const r = c.getBoundingClientRect(); return [(e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height]; };
+  c.onpointerdown = e => { d = true; n++; c.setPointerCapture(e.pointerId); const a = pt(e); x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(a[0] + .1, a[1]); x.stroke(); };
+  c.onpointermove = e => { if (!d) return; const a = pt(e); x.lineTo(a[0], a[1]); x.stroke(); };
+  c.onpointerup = c.onpointercancel = () => { d = false; };
+  $('.sg-clr', host).onclick = () => { x.clearRect(0, 0, c.width, c.height); n = 0; };
+  return { ok: $('.sg-ok', host), blob: () => n ? cropBlob(c) : null };
+}
+async function simpanTtd(b, blob) {
+  await Berkas.put(bonKey(b), 'ttd', blob);
+  const gs = data.kegiatan.filter(g => g.bon === b), it = gs[0] && itemFor(gs[0]), p = it && pkOf(it.pk_id);
+  if (p) await Berkas.put('pk_' + (pkKey(p) || p.id), 'ttd', blob);     // dipakai ulang untuk paket berikutnya
+}
+async function ttdDialog(b) {
+  const dlg = $('#bk'), body = $('#bk-body'), gs = data.kegiatan.filter(g => g.bon === b), it = gs[0] && itemFor(gs[0]), p = it && pkOf(it.pk_id), pkk = p ? (pkKey(p) || p.id) : '';
+  const tk = 'bon_ttdtok_' + b; let timer = null, done = false;
+  const finish = async blob => { if (done) return; done = true; clearInterval(timer); await simpanTtd(b, blob); dlg.close(); toast('Tanda tangan PK tersimpan untuk semua laporan dalam paket ini.', 5000); renderPaket(); };
+  body.innerHTML = `<div style="padding:20px"><h2>Tanda tangan PK · BON ${Doc.tgl(bonTgl(b))}</h2>
+    <p class="hint">Cukup sekali: gambar tanda tangan dipakai di semua laporan dalam paket BON ini (BON sendiri tetap tanda tangan basah).</p>
+    <h3 style="margin-top:10px">Lewat ponsel PK</h3><div id="tt-link" class="row" style="align-items:flex-start"><span class="hint">Membuat tautan…</span></div>
+    <h3 style="margin-top:14px">Gambar di layar ini</h3><div id="tt-pad"></div>
+    <h3 style="margin-top:14px">Atau unggah gambar tanda tangan</h3><div class="row"><input type="file" id="tt-up" accept="image/*"><span id="tt-old"></span></div>
+    <div class="acts"><button type="button" id="bk-x">Tutup</button></div></div>`;
+  const pad = sigPad($('#tt-pad')); pad.ok.onclick = guard(async () => { const bl = await pad.blob(); if (!bl) return toast('Gambar tanda tangan dulu.'); await finish(bl); });
+  $('#tt-up').onchange = guard(async e => { const f = e.target.files[0]; if (f) await finish(f); });
+  const old = await Berkas.get('pk_' + pkk, 'ttd');
+  if (old) { $('#tt-old').innerHTML = '<button type="button" class="sm" id="tt-reuse">Pakai tanda tangan tersimpan milik PK ini</button>'; $('#tt-reuse').onclick = guard(() => finish(old.blob)); }
+  $('#bk-x').onclick = () => dlg.close();
+  dlg.onclose = () => { clearInterval(timer); renderPaket(); };
+  dlg.showModal();
+  if (!remote()) { $('#tt-link').innerHTML = '<span class="hint">Tautan ponsel butuh koneksi Google Sheets (Pengaturan). Gunakan gambar di layar atau unggah.</span>'; return; }
+  try {
+    let t = JSON.parse(localStorage.getItem(tk) || 'null');
+    if (t) { const r = await api({ action: 'ttdcek', token: t.token }, true); if (r.status === 'expired') t = null; else if (r.status === 'ok') return finish(await (await fetch(r.img)).blob()); }
+    if (!t) { const r = await api({ action: 'ttdbaru' }, true); t = { token: r.token, url: r.url }; localStorage.setItem(tk, JSON.stringify(t)); }
+    const c = Berkas.qrCanvas(t.url, 200); c.style.cssText = 'width:150px;height:150px;border:1px solid var(--line);border-radius:8px';
+    $('#tt-link').innerHTML = '<div style="flex:1;min-width:230px"><p class="hint" style="margin:0 0 6px">Pindai QR dengan ponsel PK, atau bagikan tautan berikut. Berlaku 6 jam, sekali pakai.</p><input readonly id="tt-url" value="' + esc(t.url) + '"><div class="row" style="margin-top:6px"><button type="button" class="sm" id="tt-cp">Salin tautan</button><button type="button" class="sm" id="tt-sh">Bagikan…</button></div><p class="hint" id="tt-st" style="margin-top:8px">Menunggu tanda tangan dari ponsel…</p></div>';
+    $('#tt-link').prepend(c);
+    $('#tt-cp').onclick = async () => { try { await navigator.clipboard.writeText(t.url); toast('Tautan disalin.'); } catch { $('#tt-url').select(); toast('Salin manual (Ctrl+C).'); } };
+    $('#tt-sh').onclick = () => navigator.share ? navigator.share({ title: 'Tanda tangan PK', url: t.url }).catch(() => { }) : $('#tt-cp').click();
+    timer = setInterval(async () => {
+      try {
+        const r = await api({ action: 'ttdcek', token: t.token }, true);
+        if (r.status === 'ok') { localStorage.removeItem(tk); await finish(await (await fetch(r.img)).blob()); }
+        else if (r.status === 'expired') { clearInterval(timer); localStorage.removeItem(tk); const s = $('#tt-st'); if (s) s.textContent = 'Tautan kedaluwarsa. Tutup lalu buka lagi untuk tautan baru.'; }
+      } catch { /* coba lagi pada putaran berikutnya */ }
+    }, 3000);
+  } catch (e) { $('#tt-link').innerHTML = '<span class="hint">Gagal membuat tautan: ' + esc(e.message) + '. Pastikan backend Google Apps Script sudah diperbarui (Pengaturan). Atau gunakan gambar di layar / unggah.</span>'; }
 }
 // ============================================================ TEMPLATE surat (editor teks kaya, placeholder ${...})
 const TPL_KEY = 'bon_templates';
