@@ -24,15 +24,20 @@ button.p{background:#3f5f7f;color:#fff}button:disabled{opacity:.5}#m{margin-top:
     return fetch(U, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
   }
   if (!T || !/^https:\/\/script\.google(usercontent)?\.com\//.test(U || '')) { box.hidden = true; msg('Tautan tidak lengkap. Minta tautan baru dari petugas.', 'er'); return; }
-  // ukuran kanvas mengikuti layar agar goresan tidak meleset
-  var W = Math.min(900, Math.round(c.getBoundingClientRect().width * 2)) || 900, H = 520;
-  c.width = W; c.height = H; x.lineWidth = 6; x.lineCap = 'round'; x.lineJoin = 'round'; x.strokeStyle = '#000';
-  var d = false, n = 0;
-  function pt(e) { var r = c.getBoundingClientRect(); return [(e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height]; }
-  c.addEventListener('pointerdown', function (e) { e.preventDefault(); d = true; n++; try { c.setPointerCapture(e.pointerId); } catch (_) { } var a = pt(e); x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(a[0] + .1, a[1]); x.stroke(); });
-  c.addEventListener('pointermove', function (e) { if (!d) return; e.preventDefault(); var a = pt(e); x.lineTo(a[0], a[1]); x.stroke(); });
-  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (ev) { c.addEventListener(ev, function () { d = false; }); });
-  document.getElementById('u').onclick = function () { x.clearRect(0, 0, c.width, c.height); n = 0; msg(''); };
+  // ukuran kanvas mengikuti layar (resolusi 3x agar halus); garis dihaluskan kurva kuadrat antar titik tengah,
+  // tebalnya berubah mengikuti kecepatan goresan seperti pena
+  var W = Math.min(1500, Math.round(c.getBoundingClientRect().width * 3)) || 900, H = Math.round(W * 0.58);
+  c.width = W; c.height = H; x.lineCap = 'round'; x.lineJoin = 'round'; x.strokeStyle = '#000'; x.imageSmoothingQuality = 'high';
+  var d = false, n = 0, P = null, M = null, LW = 0, T = 0, BASE = W / 115;
+  function pt(e) { var r = c.getBoundingClientRect(); return [(e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height, e.timeStamp || Date.now()]; }
+  function seg(a) {
+    var m = [(P[0] + a[0]) / 2, (P[1] + a[1]) / 2], dt = Math.max(1, a[2] - P[2]), v = Math.hypot(a[0] - P[0], a[1] - P[1]) / dt;
+    var w = Math.max(BASE * 0.55, Math.min(BASE * 1.5, BASE * 1.6 / (1 + v * 1.1))); LW = LW ? LW * 0.7 + w * 0.3 : w;
+    x.lineWidth = LW; x.beginPath(); x.moveTo(M[0], M[1]); x.quadraticCurveTo(P[0], P[1], m[0], m[1]); x.stroke(); P = a; M = m;
+  }
+  c.addEventListener('pointerdown', function (e) { e.preventDefault(); d = true; n++; try { c.setPointerCapture(e.pointerId); } catch (_) { } var a = pt(e); P = M = a; LW = 0; x.fillStyle = '#000'; x.beginPath(); x.arc(a[0], a[1], BASE * 0.6, 0, 7); x.fill(); });
+  c.addEventListener('pointermove', function (e) { if (!d) return; e.preventDefault(); var ev = e.getCoalescedEvents ? e.getCoalescedEvents() : [e]; if (!ev.length) ev = [e]; for (var i = 0; i < ev.length; i++) seg(pt(ev[i])); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (ev) { c.addEventListener(ev, function () { if (d && P) { x.lineWidth = LW || BASE; x.beginPath(); x.moveTo(M[0], M[1]); x.lineTo(P[0], P[1]); x.stroke(); } d = false; P = null; }); });  document.getElementById('u').onclick = function () { x.clearRect(0, 0, c.width, c.height); n = 0; msg(''); };
   function crop() {
     var w = c.width, h = c.height, D = x.getImageData(0, 0, w, h).data, a = w, b = h, r = 0, t = 0, i, j;
     for (j = 0; j < h; j++) for (i = 0; i < w; i++) if (D[(j * w + i) * 4 + 3] > 20) { if (i < a) a = i; if (i > r) r = i; if (j < b) b = j; if (j > t) t = j; }
@@ -42,7 +47,7 @@ button.p{background:#3f5f7f;color:#fff}button:disabled{opacity:.5}#m{margin-top:
   k.onclick = function () {
     if (!n) return msg('Tanda tangani dulu.', 'er');
     var o = crop(), s = o.toDataURL('image/png');
-    while (s.length > 85000) { var z = document.createElement('canvas'); z.width = Math.round(o.width * .8); z.height = Math.round(o.height * .8); z.getContext('2d').drawImage(o, 0, 0, z.width, z.height); o = z; s = o.toDataURL('image/png'); }
+    while (s.length > 85000) { var z = document.createElement('canvas'); z.width = Math.round(o.width * .9); z.height = Math.round(o.height * .9); var zc = z.getContext('2d'); zc.imageSmoothingQuality = 'high'; zc.drawImage(o, 0, 0, z.width, z.height); o = z; s = o.toDataURL('image/png'); }
     k.disabled = true; msg('Mengirim…');
     post({ action: 'ttdkirim', token: T, img: s }).then(function (r) {
       if (r && r.ok) { box.hidden = true; msg('Terkirim. Anda boleh menutup halaman ini.', 'ok'); } else { k.disabled = false; msg((r && r.error) || 'Gagal mengirim.', 'er'); }

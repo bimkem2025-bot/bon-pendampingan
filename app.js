@@ -967,12 +967,13 @@ async function cropBlob(c) {
 function sigPad(host) {
   host.innerHTML = '<canvas width="900" height="300" style="width:100%;max-width:520px;height:170px;border:1px dashed var(--line2);border-radius:8px;background:#fff;touch-action:none;display:block"></canvas><div class="row" style="margin-top:6px"><button type="button" class="sm sg-clr">Ulangi</button><button type="button" class="sm pri sg-ok">Pakai tanda tangan ini</button></div>';
   const c = $('canvas', host), x = c.getContext('2d'); let d = false, n = 0;
-  x.lineWidth = 5; x.lineCap = x.lineJoin = 'round'; x.strokeStyle = '#000';
-  const pt = e => { const r = c.getBoundingClientRect(); return [(e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height]; };
-  c.onpointerdown = e => { d = true; n++; c.setPointerCapture(e.pointerId); const a = pt(e); x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(a[0] + .1, a[1]); x.stroke(); };
-  c.onpointermove = e => { if (!d) return; const a = pt(e); x.lineTo(a[0], a[1]); x.stroke(); };
-  c.onpointerup = c.onpointercancel = () => { d = false; };
-  $('.sg-clr', host).onclick = () => { x.clearRect(0, 0, c.width, c.height); n = 0; };
+  x.lineCap = x.lineJoin = 'round'; x.strokeStyle = '#000'; x.imageSmoothingQuality = 'high';
+  let P = null, M = null, LW = 0; const BASE = 6;
+  const pt = e => { const r = c.getBoundingClientRect(); return [(e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height, e.timeStamp]; };
+  const seg = a => { const m = [(P[0] + a[0]) / 2, (P[1] + a[1]) / 2], v = Math.hypot(a[0] - P[0], a[1] - P[1]) / Math.max(1, a[2] - P[2]), w = Math.max(BASE * 0.55, Math.min(BASE * 1.5, BASE * 1.6 / (1 + v * 1.1))); LW = LW ? LW * 0.7 + w * 0.3 : w; x.lineWidth = LW; x.beginPath(); x.moveTo(M[0], M[1]); x.quadraticCurveTo(P[0], P[1], m[0], m[1]); x.stroke(); P = a; M = m; };
+  c.onpointerdown = e => { d = true; n++; c.setPointerCapture(e.pointerId); const a = pt(e); P = M = a; LW = 0; x.fillStyle = '#000'; x.beginPath(); x.arc(a[0], a[1], BASE * 0.6, 0, 7); x.fill(); };
+  c.onpointermove = e => { if (!d) return; const ev = e.getCoalescedEvents ? e.getCoalescedEvents() : [e]; for (const q of (ev.length ? ev : [e])) seg(pt(q)); };
+  c.onpointerup = c.onpointercancel = () => { if (d && P) { x.lineWidth = LW || BASE; x.beginPath(); x.moveTo(M[0], M[1]); x.lineTo(P[0], P[1]); x.stroke(); } d = false; P = null; };  $('.sg-clr', host).onclick = () => { x.clearRect(0, 0, c.width, c.height); n = 0; };
   return { ok: $('.sg-ok', host), blob: () => n ? cropBlob(c) : null };
 }
 async function simpanTtd(b, blob) {
