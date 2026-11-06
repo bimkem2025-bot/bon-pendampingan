@@ -25,7 +25,7 @@ const PdfDoc = (() => {
 .doc .ttd.lf{text-align:left}
 .doc .sg td{padding-left:12mm}
 .doc .gt.nb th,.doc .gt.nb td{border:0}.doc .gt.nb th{font-weight:400}
-.doc .ph{display:inline-block;font:inherit;color:#000;white-space:nowrap;padding:2mm 0;background:#fff}
+.doc .ph{display:inline-block;font:inherit;color:#000;white-space:nowrap;padding:2mm 0}
 .doc .ttd2 img{display:block;height:41px;width:auto;margin:6px 0}
 .doc .gt{table-layout:fixed}.doc .gt td.r,.doc .gt td.nw{white-space:nowrap}
 .doc ul{margin:0 0 7px;padding-left:9mm}.doc ul li{text-align:justify}
@@ -135,31 +135,80 @@ const PdfDoc = (() => {
 
   // ---------------------------------------------------------------- PDF
   const imgsReady = root => Promise.all([...root.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
-  // PDF dibuat dari gambar (html2canvas), sehingga teks tidak bisa dicari aplikasi lain. Token ${nomor_naskah} dan
-  // ${ttd_pengirim} karena itu TIDAK digambar ke gambar, melainkan ditulis ulang sebagai teks PDF asli (Times, 11 pt,
-  // tidak tebal) tepat di posisinya, satu rangkaian utuh, sehingga dapat dicari dan diganti aplikasi lain.
+  // PDF teks sungguhan: tata letak dihitung browser (posisi tiap kata/garis/gambar dibaca dari DOM), lalu ditulis ke PDF
+  // sebagai teks (font standar Times/Helvetica/Courier, tidak disematkan sehingga file kecil), garis tabel, dan gambar
+  // yang dikompres (JPEG; PNG hanya bila ada transparansi). Teks bisa dicari/diseleksi/diganti aplikasi lain.
+  const FJ = { 'Times': ['Times-Roman', 'Times-Bold', 'Times-Italic', 'Times-BoldItalic'], 'Helvetica': ['Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique', 'Helvetica-BoldOblique'], 'Courier': ['Courier', 'Courier-Bold', 'Courier-Oblique', 'Courier-BoldOblique'] };
+  const rgbOf = c => { const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/.exec(c || ''); return m ? { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] } : null; };
+  async function imgBytes(img, wpx, hpx) {
+    const nw = img.naturalWidth || wpx, nh = img.naturalHeight || hpx, k = Math.min(1, (wpx * 2.6) / nw, (hpx * 2.6) / nh);
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(nw * k)); c.height = Math.max(1, Math.round(nh * k));
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+    const b = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85)); return { png: false, bytes: new Uint8Array(await b.arrayBuffer()) };
+  }
   async function render(html) {
-    if (!window.html2pdf) throw new Error('Pustaka PDF belum termuat, muat ulang halaman.');
+    if (!window.PDFLib) throw new Error('Pustaka PDF belum termuat, muat ulang halaman.');
     const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-99999px;top:0;background:#fff';
     host.innerHTML = html; document.body.append(host);
     try {
       await imgsReady(host);
-      const root = host.firstElementChild, pgs = [...root.querySelectorAll('.pg')], marks = [];
-      root.querySelectorAll('.ph').forEach(el => {
-        const pg = el.closest('.pg'), a = pg.getBoundingClientRect(), r = el.getBoundingClientRect(), fs = parseFloat(getComputedStyle(el).fontSize);
-        marks.push({ page: pgs.indexOf(pg), text: el.textContent, x: (r.left - a.left) / a.width, y: (r.top + r.height / 2 + fs * 0.32 - a.top) / a.width, fs: fs / a.width });
-        el.style.color = 'transparent';
-      });
-      let blob = await html2pdf().set({ margin: 0, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true, logging: false, letterRendering: true }, jsPDF: { unit: 'mm', format: [215.9, 330.2], orientation: 'portrait' }, pagebreak: { mode: ['css'], avoid: ['tr'] } }).from(root).outputPdf('blob');
-      if (marks.length && window.PDFLib) {
-        const { PDFDocument, StandardFonts, rgb } = PDFLib, d = await PDFDocument.load(await blob.arrayBuffer()), f = await d.embedFont(StandardFonts.TimesRoman), n = d.getPageCount();
-        for (const m of marks) {
-          const pg = d.getPage(Math.min(Math.max(m.page, 0), n - 1)), { width, height } = pg.getSize();
-          pg.drawText(m.text, { x: m.x * width, y: height - m.y * width, size: m.fs * width, font: f, color: rgb(0, 0, 0) });
+      const { PDFDocument, StandardFonts, rgb } = PDFLib, d = await PDFDocument.create(), fonts = {}, root = host.firstElementChild;
+      const font = async (cs, ) => {
+        const fam = (cs.fontFamily || '').toLowerCase(), g = /courier|mono/.test(fam) ? 'Courier' : /arial|helvetica|sans|calibri|verdana|tahoma/.test(fam) ? 'Helvetica' : 'Times';
+        const k = FJ[g][(+cs.fontWeight >= 600 ? 1 : 0) + (cs.fontStyle === 'italic' || cs.fontStyle === 'oblique' ? 2 : 0)];
+        return fonts[k] || (fonts[k] = await d.embedFont(k));
+      };
+      const safe = (f, s) => { s = s.replace(/\u00a0/g, ' ').replace(/[\u2010-\u2012]/g, '-').replace(/\u2015/g, '\u2014'); let o = ''; const ok = f.getCharacterSet(); for (const ch of s) o += ok.includes(ch.codePointAt(0)) ? ch : '?'; return o; };
+      const imgCache = new Map();
+      for (const pgEl of root.querySelectorAll('.pg')) {
+        const a = pgEl.getBoundingClientRect(), PW = 215.9 / 25.4 * 72, sc = PW / a.width, PH = Math.max(330.2 / 25.4 * 72, a.height * sc);
+        const page = d.addPage([PW, PH]);
+        const rect = (r0, x, y, w, h, c) => page.drawRectangle({ x: (x - a.left) * sc, y: PH - (y - a.top + h) * sc, width: w * sc, height: h * sc, color: rgb(c.r / 255, c.g / 255, c.b / 255), borderWidth: 0 });
+        const els = [pgEl, ...pgEl.querySelectorAll('*')];
+        for (const el of els) {                                    // latar dan garis
+          if (/^(STYLE|SCRIPT|IMG)$/.test(el.tagName)) continue;
+          const cs = getComputedStyle(el), r = el.getBoundingClientRect(); if (!r.width || !r.height || cs.visibility === 'hidden') continue;
+          const bg = rgbOf(cs.backgroundColor); if (bg && bg.a > 0.05 && !(bg.r > 250 && bg.g > 250 && bg.b > 250)) rect(0, r.left, r.top, r.width, r.height, bg);
+          const bd = [['Top', 0], ['Right', 1], ['Bottom', 2], ['Left', 3]];
+          for (const [n, i] of bd) {
+            const w = parseFloat(cs['border' + n + 'Width']); if (!w || cs['border' + n + 'Style'] === 'none' || cs['border' + n + 'Style'] === 'hidden') continue;
+            const c = rgbOf(cs['border' + n + 'Color']) || { r: 0, g: 0, b: 0, a: 1 }; if (c.a < 0.05) continue;
+            if (i === 0) rect(0, r.left, r.top, r.width, w, c); else if (i === 2) rect(0, r.left, r.bottom - w, r.width, w, c);
+            else if (i === 3) rect(0, r.left, r.top, w, r.height, c); else rect(0, r.right - w, r.top, w, r.height, c);
+          }
         }
-        blob = new Blob([await d.save()], { type: 'application/pdf' });
+        for (const im of pgEl.querySelectorAll('img')) {           // gambar (dikompres)
+          const r = im.getBoundingClientRect(); if (!r.width || !r.height || !im.complete || !im.naturalWidth) continue;
+          const key = im.src + '|' + Math.round(r.width) + 'x' + Math.round(r.height);
+          try {
+            if (!imgCache.has(key)) { const o = await imgBytes(im, r.width, r.height); imgCache.set(key, o.png ? await d.embedPng(o.bytes) : await d.embedJpg(o.bytes)); }
+            page.drawImage(imgCache.get(key), { x: (r.left - a.left) * sc, y: PH - (r.bottom - a.top) * sc, width: r.width * sc, height: r.height * sc });
+          } catch (e) { console.warn('gambar dilewati', e); }
+        }
+        const tw = document.createTreeWalker(pgEl, NodeFilter.SHOW_TEXT), rg = document.createRange(), first = new Map();
+        for (let n; (n = tw.nextNode());) {                        // teks per kata
+          const pe = n.parentElement; if (!pe || /^(STYLE|SCRIPT)$/.test(pe.tagName)) continue;
+          const cs = getComputedStyle(pe); if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+          const f = await font(cs), fs = parseFloat(cs.fontSize), col = rgbOf(cs.color) || { r: 0, g: 0, b: 0 }, ul = /underline/.test(cs.textDecorationLine);
+          for (const m of n.data.matchAll(/\S+/g)) {
+            rg.setStart(n, m.index); rg.setEnd(n, m.index + m[0].length);
+            const r = rg.getClientRects()[0]; if (!r || !r.width) continue;
+            let w = m[0]; if (cs.textTransform === 'uppercase') w = w.toUpperCase();
+            const base = r.top + (r.height - fs * 1.107) / 2 + fs * 0.891, x = (r.left - a.left) * sc, y = PH - (base - a.top) * sc, st = safe(f, w); let sz = fs * sc; const pw = f.widthOfTextAtSize(st, sz), bw = r.width * sc; if (pw > bw * 0.97) sz *= Math.max(0.85, bw * 0.97 / pw);
+            page.drawText(st, { x, y, size: sz, font: f, color: rgb(col.r / 255, col.g / 255, col.b / 255) });
+            if (ul) page.drawRectangle({ x, y: y - sz * 0.12, width: r.width * sc, height: Math.max(0.5, sz * 0.05), color: rgb(col.r / 255, col.g / 255, col.b / 255) });
+            const li = pe.closest('li'); if (li && !first.has(li)) first.set(li, { r, base, f, fs, col });
+          }
+        }
+        for (const [li, o] of first) {                              // penanda daftar
+          const cs = getComputedStyle(li), bl = li.parentElement.classList.contains('bl'), ty = cs.listStyleType;
+          if (!bl && (cs.display !== 'list-item' || ty === 'none')) continue;
+          let s = '\u2022', xr = bl ? li.getBoundingClientRect().left : o.r.left - o.fs * 0.9;
+          if (!bl && /decimal|alpha|roman/.test(ty)) { const i = [...li.parentElement.children].indexOf(li) + 1; s = (ty === 'lower-alpha' ? String.fromCharCode(96 + i) : ty === 'upper-alpha' ? String.fromCharCode(64 + i) : i) + '.'; xr = o.r.left - o.fs * 0.5 - o.f.widthOfTextAtSize(s, o.fs * sc) / sc; }
+          page.drawText(s, { x: (xr - a.left) * sc, y: PH - (o.base - a.top) * sc, size: o.fs * sc, font: o.f, color: rgb(o.col.r / 255, o.col.g / 255, o.col.b / 255) });
+        }
       }
-      return blob;
+      return new Blob([await d.save()], { type: 'application/pdf' });
     } finally { host.remove(); }
   }
   async function toPdf(html, filename) {
