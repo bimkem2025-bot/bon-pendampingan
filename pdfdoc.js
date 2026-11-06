@@ -25,7 +25,7 @@ const PdfDoc = (() => {
 .doc .ttd.lf{text-align:left}
 .doc .sg td{padding-left:12mm}
 .doc .gt.nb th,.doc .gt.nb td{border:0}.doc .gt.nb th{font-weight:400}
-.doc .ph{display:inline-block;font:700 15pt/1.5 "Courier New",Courier,monospace;letter-spacing:.6px;color:#000;white-space:nowrap;padding:2mm 3mm;background:#fff}
+.doc .ph{display:inline-block;font:inherit;color:#000;white-space:nowrap;padding:2mm 0;background:#fff}
 .doc .ttd2 img{display:block;height:41px;width:auto;margin:6px 0}
 .doc .gt{table-layout:fixed}.doc .gt td.r,.doc .gt td.nw{white-space:nowrap}
 .doc ul{margin:0 0 7px;padding-left:9mm}.doc ul li{text-align:justify}
@@ -135,22 +135,38 @@ const PdfDoc = (() => {
 
   // ---------------------------------------------------------------- PDF
   const imgsReady = root => Promise.all([...root.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
-  async function toPdf(html, filename) {
+  // PDF dibuat dari gambar (html2canvas), sehingga teks tidak bisa dicari aplikasi lain. Token ${nomor_naskah} dan
+  // ${ttd_pengirim} karena itu TIDAK digambar ke gambar, melainkan ditulis ulang sebagai teks PDF asli (Times, 11 pt,
+  // tidak tebal) tepat di posisinya, satu rangkaian utuh, sehingga dapat dicari dan diganti aplikasi lain.
+  async function render(html) {
     if (!window.html2pdf) throw new Error('Pustaka PDF belum termuat, muat ulang halaman.');
     const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-99999px;top:0;background:#fff';
     host.innerHTML = html; document.body.append(host);
     try {
       await imgsReady(host);
-      await html2pdf().set({
-        margin: 0, filename,
-        image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: { scale: 2, useCORS: true, logging: false, letterRendering: true },
-        jsPDF: { unit: 'mm', format: [215.9, 330.2], orientation: 'portrait' },
-        pagebreak: { mode: ['css'], avoid: ['tr'] },
-      }).from(host.firstElementChild).save();
+      const root = host.firstElementChild, pgs = [...root.querySelectorAll('.pg')], marks = [];
+      root.querySelectorAll('.ph').forEach(el => {
+        const pg = el.closest('.pg'), a = pg.getBoundingClientRect(), r = el.getBoundingClientRect(), fs = parseFloat(getComputedStyle(el).fontSize);
+        marks.push({ page: pgs.indexOf(pg), text: el.textContent, x: (r.left - a.left) / a.width, y: (r.top + r.height / 2 + fs * 0.32 - a.top) / a.width, fs: fs / a.width });
+        el.style.color = 'transparent';
+      });
+      let blob = await html2pdf().set({ margin: 0, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true, logging: false, letterRendering: true }, jsPDF: { unit: 'mm', format: [215.9, 330.2], orientation: 'portrait' }, pagebreak: { mode: ['css'], avoid: ['tr'] } }).from(root).outputPdf('blob');
+      if (marks.length && window.PDFLib) {
+        const { PDFDocument, StandardFonts, rgb } = PDFLib, d = await PDFDocument.load(await blob.arrayBuffer()), f = await d.embedFont(StandardFonts.TimesRoman), n = d.getPageCount();
+        for (const m of marks) {
+          const pg = d.getPage(Math.min(Math.max(m.page, 0), n - 1)), { width, height } = pg.getSize();
+          pg.drawText(m.text, { x: m.x * width, y: height - m.y * width, size: m.fs * width, font: f, color: rgb(0, 0, 0) });
+        }
+        blob = new Blob([await d.save()], { type: 'application/pdf' });
+      }
+      return blob;
     } finally { host.remove(); }
   }
-
+  async function toPdf(html, filename) {
+    const blob = await render(html), a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = /\.pdf$/i.test(filename) ? filename : filename + '.pdf'; document.body.append(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  }
   // surat bebas dari editor template: isi HTML (sudah terisi data) + kop opsional
   // Halaman dipotong otomatis per blok teratas sesuai tinggi isi (F4 - margin); "Halaman baru" (.pbk) memaksa halaman baru.
   function surat(body, withKop = true, m = {}) {
@@ -172,13 +188,6 @@ const PdfDoc = (() => {
     const st = `padding:${mg.t}mm ${mg.r}mm ${mg.b}mm ${mg.l}mm`;
     return wrap(pages.map((p, i) => `<div class="pg" style="${st}">${i === 0 && withKop ? kop : ''}${p.join('')}</div>`).join(''), 'sx');
   }
-  async function toBlob(html) {
-    const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-99999px;top:0;background:#fff';
-    host.innerHTML = html; document.body.append(host);
-    try {
-      await imgsReady(host);
-      return await html2pdf().set({ margin: 0, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true, logging: false, letterRendering: true }, jsPDF: { unit: 'mm', format: [215.9, 330.2], orientation: 'portrait' }, pagebreak: { mode: ['css'], avoid: ['tr'] } }).from(host.firstElementChild).outputPdf('blob');
-    } finally { host.remove(); }
-  }
+  const toBlob = html => render(html);
   return { sp, bon, laporan, toPdf, toBlob, surat };
 })();

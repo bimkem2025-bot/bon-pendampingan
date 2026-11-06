@@ -11,7 +11,7 @@ Dokumen dibuat di browser; foto tidak pernah diunggah. Repo ini hanya berisi kod
    Tanggal pelaksanaan tidak boleh lebih awal dari tanggal alih status.
 4. **Dokumen hukum**: pilih dulu status yang mana, lalu isi SP Han/putusan/penetapan beserta tanggalnya.
 5. **Kalender**: seret klien ke tanggal (atau klik lalu klik tanggal); *Saran tanggal* memilih hari idle terdekat.
-6. **Unduh**: per kegiatan tekan *Pratinjau SP* / *Pratinjau Laporan* (seret foto ke baris itu), lihat hasilnya, lalu *Unduh PDF* satu per satu (Word tetap tersedia untuk disunting). BON: centang kegiatan satu PK, *Pratinjau BON*. PDF berukuran F4 dengan kop seperti project Reg-2026 (`assets/kop.png`, `pdfdoc.js`, html2pdf).
+6. **Unduh**: per kegiatan tekan *Pratinjau SP* / *Pratinjau Laporan* (seret foto ke baris itu), lihat hasilnya, lalu *Unduh PDF* satu per satu (Word tetap tersedia untuk disunting). BON: centang kegiatan satu PK, *Pratinjau BON*. PDF berukuran F4 dengan kop seperti project Reg-2026 (`assets/kop.png`, `pdfdoc.js`, html2pdf). Token `${nomor_naskah}` dan `${ttd_pengirim}` ditulis sebagai teks PDF asli (Times 11 pt, tidak tebal) di atas halaman bergambar agar dapat dicari/diganti aplikasi lain.
 
 ## Aturan tanggal
 - Tanggal dokumen < tanggal pelaksanaan; tanggal alih status ≤ tanggal pelaksanaan.
