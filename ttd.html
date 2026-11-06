@@ -53,6 +53,6 @@ button.p{background:#3f5f7f;color:#fff}button:disabled{opacity:.5}#m{margin-top:
       if (r && r.ok) { box.hidden = true; msg('Terkirim. Anda boleh menutup halaman ini.', 'ok'); } else { k.disabled = false; msg((r && r.error) || 'Gagal mengirim.', 'er'); }
     }).catch(function () { k.disabled = false; msg('Gagal mengirim. Periksa sinyal lalu coba lagi.', 'er'); });
   };
-  post({ action: 'ttdada', token: T }).then(function (r) { if (!r || r.status !== 'wait') { box.hidden = true; msg('Tautan ini sudah dipakai atau kedaluwarsa. Minta tautan baru dari petugas.', 'er'); } }).catch(function () { /* tetap boleh dicoba */ });
+  post({ action: 'ttdada', token: T }).then(function (r) { if (r && r.status === 'expired') { box.hidden = true; msg('Tautan sudah kedaluwarsa. Minta tautan baru dari petugas (tombol Buat tautan baru di aplikasi).', 'er'); } }).catch(function () { /* tetap boleh dicoba */ });
 })();
 </script></body></html>

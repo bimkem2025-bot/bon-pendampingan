@@ -33,16 +33,17 @@ function ttdBaru_() {
   CacheService.getScriptCache().put('ttd_' + token, JSON.stringify({ s: 'wait' }), TTD_TTL);
   return { ok: true, token: token, url: ScriptApp.getService().getUrl() + '?ttd=' + token };
 }
-function ttdCek_(token) {
-  const raw = CacheService.getScriptCache().get('ttd_' + String(token || ''));
+function ttdCek_(token, ambil) {
+  const cache = CacheService.getScriptCache(), raw = cache.get('ttd_' + String(token || ''));
   if (!raw) return { ok: true, status: 'expired' };
   const o = JSON.parse(raw);
-  return o.s === 'ok' ? { ok: true, status: 'ok', img: o.img } : { ok: true, status: 'wait' };
+  if (o.s === 'ok') { if (ambil) cache.remove('ttd_' + String(token || '')); return { ok: true, status: 'ok', img: o.img }; }
+  return { ok: true, status: 'wait' };
 }
 // dipanggil dari halaman ponsel lewat google.script.run
 function ttdKirim(token, dataUrl) {
   const cache = CacheService.getScriptCache(), key = 'ttd_' + String(token || ''), raw = cache.get(key);
-  if (!raw || JSON.parse(raw).s !== 'wait') return { success: false, message: 'Tautan sudah dipakai atau kedaluwarsa.' };
+  if (!raw) return { success: false, message: 'Tautan kedaluwarsa. Minta tautan baru dari petugas.' };   // selama belum diambil aplikasi, boleh dikirim ulang (menimpa)
   const s = String(dataUrl || '');
   if (s.length > TTD_MAX || !/^data:image\/png;base64,[A-Za-z0-9+\/=]+$/.test(s)) return { success: false, message: 'Gambar tanda tangan tidak valid atau terlalu besar.' };
   cache.put(key, JSON.stringify({ s: 'ok', img: s }), TTD_TTL);
@@ -78,7 +79,7 @@ function ttdHalaman_(token) {
 // aksi tanpa kata sandi untuk halaman TTD di ponsel (ttd.html): token acak sekali pakai adalah satu-satunya kredensial
 function ttdPublik_(req) {
   const cache = CacheService.getScriptCache(), k = 'ttd_' + String(req.token || ''), raw = cache.get(k);
-  if (req.action === 'ttdada') return { ok: true, status: !raw ? 'expired' : (JSON.parse(raw).s === 'wait' ? 'wait' : 'used') };
+  if (req.action === 'ttdada') return { ok: true, status: !raw ? 'expired' : 'wait' };
   const r = ttdKirim(req.token, req.img);
   return r.success ? { ok: true } : { ok: false, error: r.message };
 }
@@ -100,7 +101,7 @@ function handle_(req) {
       case 'bulk': (req.rows || []).forEach(r => upsert_(req.sheet, r)); return json_({ ok: true, n: (req.rows || []).length });
       case 'remove': remove_(req.sheet, req.id); return json_({ ok: true });
       case 'ttdbaru': return json_(ttdBaru_());
-      case 'ttdcek': return json_(ttdCek_(req.token));
+      case 'ttdcek': return json_(ttdCek_(req.token, req.ambil));
       case 'settings': upsert_('Pengaturan', { key: 'settings', value: JSON.stringify(req.settings) }); return json_({ ok: true });
       default: return json_({ ok: false, error: 'aksi tidak dikenal' });
     }

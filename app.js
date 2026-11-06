@@ -1001,18 +1001,19 @@ async function ttdDialog(b) {
   if (!remote()) { $('#tt-link').innerHTML = '<span class="hint">Tautan ponsel butuh koneksi Google Sheets (Pengaturan). Gunakan gambar di layar atau unggah.</span>'; return; }
   try {
     let t = JSON.parse(localStorage.getItem(tk) || 'null');
-    if (t) { const r = await api({ action: 'ttdcek', token: t.token }, true); if (r.status === 'expired') t = null; else if (r.status === 'ok') return finish(await (await fetch(r.img)).blob()); }
+    if (t) { const r = await api({ action: 'ttdcek', token: t.token }, true); if (r.status === 'expired') t = null; else if (r.status === 'ok') { localStorage.removeItem(tk); await api({ action: 'ttdcek', token: t.token, ambil: true }, true).catch(() => { }); return finish(await (await fetch(r.img)).blob()); } }
     if (!t) { const r = await api({ action: 'ttdbaru' }, true); t = { token: r.token }; localStorage.setItem(tk, JSON.stringify(t)); }
     t.url = new URL('ttd.html', location.href).href.split('?')[0] + '?t=' + encodeURIComponent(t.token) + '&u=' + encodeURIComponent(conn().url.split('?')[0].replace(/\/dev$/, '/exec'));   // halaman TTD statis di situs ini (bukan halaman Apps Script) agar jalan di semua peramban
     const c = Berkas.qrCanvas(t.url, 200); c.style.cssText = 'width:150px;height:150px;border:1px solid var(--line);border-radius:8px';
-    $('#tt-link').innerHTML = '<div style="flex:1;min-width:230px"><p class="hint" style="margin:0 0 6px">Pindai QR dengan ponsel PK, atau bagikan tautan berikut. Berlaku 6 jam, sekali pakai.</p><input readonly id="tt-url" value="' + esc(t.url) + '"><div class="row" style="margin-top:6px"><button type="button" class="sm" id="tt-cp">Salin tautan</button><button type="button" class="sm" id="tt-sh">Bagikan…</button><button type="button" class="sm" id="tt-op">Uji buka tautan</button></div><p class="hint" id="tt-st" style="margin-top:8px">Menunggu tanda tangan dari ponsel…</p></div>';
+    $('#tt-link').innerHTML = '<div style="flex:1;min-width:230px"><p class="hint" style="margin:0 0 6px">Pindai QR dengan ponsel PK, atau bagikan tautan berikut. Berlaku 6 jam, sekali pakai.</p><input readonly id="tt-url" value="' + esc(t.url) + '"><div class="row" style="margin-top:6px"><button type="button" class="sm" id="tt-cp">Salin tautan</button><button type="button" class="sm" id="tt-sh">Bagikan…</button><button type="button" class="sm" id="tt-op">Uji buka tautan</button><button type="button" class="sm" id="tt-nw">Buat tautan baru</button></div><p class="hint" id="tt-st" style="margin-top:8px">Menunggu tanda tangan dari ponsel…</p></div>';
     $('#tt-link').prepend(c);
     $('#tt-cp').onclick = async () => { try { await navigator.clipboard.writeText(t.url); toast('Tautan disalin.'); } catch { $('#tt-url').select(); toast('Salin manual (Ctrl+C).'); } };
     $('#tt-op').onclick = () => window.open(t.url, '_blank', 'noopener');
     $('#tt-sh').onclick = () => navigator.share ? navigator.share({ title: 'Tanda tangan PK', url: t.url }).catch(() => { }) : $('#tt-cp').click();
+    $('#tt-nw').onclick = async () => { const cb = ui.onTtd; clearInterval(timer); localStorage.removeItem(tk); dlg.close(); await new Promise(r => setTimeout(r)); ui.onTtd = cb; ttdDialog(b); };
     timer = setInterval(async () => {
       try {
-        const r = await api({ action: 'ttdcek', token: t.token }, true);
+        const r = await api({ action: 'ttdcek', token: t.token, ambil: true }, true);
         if (r.status === 'ok') { localStorage.removeItem(tk); await finish(await (await fetch(r.img)).blob()); }
         else if (r.status === 'expired') { clearInterval(timer); localStorage.removeItem(tk); const s = $('#tt-st'); if (s) s.textContent = 'Tautan kedaluwarsa. Tutup lalu buka lagi untuk tautan baru.'; }
       } catch { /* coba lagi pada putaran berikutnya */ }
