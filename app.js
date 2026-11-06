@@ -777,8 +777,8 @@ async function zipAll(kind, btn) {
       const x = it[i]; btn.textContent = `Membuat ${i + 1}/${it.length}…`;
       const s = sFor(x.pk_id, date(x));
       const html = kind === 'sp' ? PdfDoc.sp(x.keg, x.k, s) : PdfDoc.laporan({ ...x, ttd: await ttdFor(x.g) }, s);
-      let n = `${kind === 'sp' ? 'SP' : 'Laporan'} ${safe(x.k.nama)} ${x.keg.tgl_pel}`, c = 1; while (used.has(n)) n = n.replace(/( \(\d+\))?$/, ` (${++c})`);
-      used.add(n); zip.file(n + '.pdf', await PdfDoc.toBlob(html));
+      let n = `${x.keg.tgl_pel}_${safe(x.k.nama)}`, c = 1; while (used.has(n.toLowerCase())) n = n.replace(/( \(\d+\))?$/, ` (${++c})`);
+      used.add(n.toLowerCase()); zip.file(n + '.pdf', await PdfDoc.toBlob(html));
     }
     download(await zip.generateAsync({ type: 'blob' }), fname);
   } finally { btn.disabled = false; btn.textContent = l0; }

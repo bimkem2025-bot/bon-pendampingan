@@ -25,6 +25,7 @@ const PdfDoc = (() => {
 .doc .ttd.lf{text-align:left}
 .doc .sg td{padding-left:12mm}
 .doc .gt.nb th,.doc .gt.nb td{border:0}.doc .gt.nb th{font-weight:400}
+.doc .ph{display:inline-block;font:700 15pt/1.5 "Courier New",Courier,monospace;letter-spacing:.6px;color:#000;white-space:nowrap;padding:2mm 3mm;background:#fff}
 .doc .ttd2 img{display:block;height:41px;width:auto;margin:6px 0}
 .doc .gt{table-layout:fixed}.doc .gt td.r,.doc .gt td.nw{white-space:nowrap}
 .doc ul{margin:0 0 7px;padding-left:9mm}.doc ul li{text-align:justify}
@@ -54,7 +55,7 @@ const PdfDoc = (() => {
     const ls = (label, items, mark) => `<table class="ls">${items.map((t, i) => `<tr><td>${i ? '' : label}</td><td>${i ? '' : ':'}</td><td>${mark(i)}</td><td>${t}</td></tr>`).join('')}</table>`;
     const kv = rows => `<table class="kv">${rows.map(([a, b, bold]) => `<tr><td>${a}</td><td>:</td><td${bold ? ' class="b"' : ''}>${esc(b)}</td></tr>`).join('')}</table>`;
     return wrap(page(`${kop}
-      <h1>SURAT PERINTAH</h1><div class="c">Nomor: ${'$'}{nomor_naskah}</div>
+      <h1>SURAT PERINTAH</h1><div class="c">Nomor: <span class="ph">${'$'}{nomor_naskah}</span></div>
       <h1 style="margin:2px 0 10px">KEPALA BALAI PEMASYARAKATAN KELAS II SINTANG</h1>
       ${ls('Menimbang', menimbang, i => 'abcd'[i] + '.')}
       <div style="height:6px"></div>
@@ -69,7 +70,7 @@ const PdfDoc = (() => {
         <tr><td></td><td></td><td>3.</td><td>Melaporkan hasil kegiatan kepada Kepala Balai Pemasyarakatan</td></tr>
       </table>
       <p style="margin-top:10px">Demikian Surat Perintah untuk dilaksanakan dan kepada semua pihak terkait dimohon bantuannya. Terima kasih.</p>
-      <div class="ttd2"><div class="l">${'$'}{ttd_pengirim}</div><div class="g"></div><div class="r2">Sintang, ${tgl(keg.tgl_sp || keg.tgl_pel)}<br>Kepala,<img src="assets/ttd-el.png" alt=""><b>${esc(s.kepala_nama)}</b></div></div>`), "sm");
+      <div class="ttd2"><div class="l"><span class="ph">${'$'}{ttd_pengirim}</span></div><div class="g"></div><div class="r2">Sintang, ${tgl(keg.tgl_sp || keg.tgl_pel)}<br>Kepala,<img src="assets/ttd-el.png" alt=""><b>${esc(s.kepala_nama)}</b></div></div>`), "sm");
   }
 
   // ---------------------------------------------------------------- BON
@@ -157,6 +158,7 @@ const PdfDoc = (() => {
     const cw = PW - mg.l - mg.r, avail = (PH - mg.t - mg.b) * px;
     const kopH = withKop ? ((cw * 202 / 1236) + 7) * px : 0;
     const host = document.createElement('div'); host.style.cssText = `position:fixed;left:-99999px;top:0;width:${cw}mm`;
+    body = body.replace(/\$\{(ttd_pengirim|nomor_naskah)\}/g, '<span class="ph">$&</span>');
     host.innerHTML = `<div class="doc">${CSS}<div class="bd">${body}</div></div>`; document.body.append(host);
     const pages = [[]]; let used = kopH;
     try {
